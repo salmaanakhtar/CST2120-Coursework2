@@ -1,5 +1,6 @@
 const express = require('express');
 const mongodb = require('mongodb');
+const bodyParser = require('body-parser');
 const User = require('./models/userModel');
 
 const app = express();
@@ -8,12 +9,16 @@ const msis = 'M00915500';
 const mongoUrl = 'mongodb+srv://akhtarsalmaan0:akhtarsalmaan0@serverlessinstance0.azj3zqe.mongodb.net/?retryWrites=true&w=majority&appName=ServerlessInstance0';
 
 app.use(express.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// Serve static files from the "frontend" directory
+app.use(express.static('../frontend'));
 
 let loggedInUsers = {};
 
 // GET: Home route
 app.get('/', (req, res) => {
-    res.send('Hello World!');
+    res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
 });
 
 // POST: User Registration
@@ -36,6 +41,7 @@ app.post(`/${msis}/users`, async (req, res) => {
         const result = await db.collection('users').insertOne(user);
         res.json({ success: true, result });
     } catch (error) {
+        console.log("error")
         res.status(500).json({ success: false, error: error.message });
     } finally {
         await client.close();

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login and Signup</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+    <!--  -->
+        <div id="forms">
+        <!--  -->
+            <div id="loginForm">
+                <h2>Login</h2>
+                <form id="login">
+                    <div class="form-group">
+                        <label for="loginUsername">Username:</label>
+                        <input type="text" class="form-control" id="loginUsername" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">Password:</label>
+                        <input type="password" class="form-control" id="loginPassword" name="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Login</button>
+                </form>
+                <p>Don't have an account? <a href="#" onclick="toggleForms()">Sign up</a></p>
+            </div>
+        <!--  -->
+
+        <!--  -->
+            <div id="signupForm" class="hidden">
+                <h2>Sign Up</h2>
+                <form id="signup">
+                    <div class="form-group">
+                        <label for="signupUsername">Username:</label>
+                        <input type="text" class="form-control" id="signupUsername" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signupEmail">Email:</label>
+                        <input type="email" class="form-control" id="signupEmail" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signupPassword">Password:</label>
+                        <input type="password" class="form-control" id="signupPassword" name="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Sign Up</button>
+                </form>
+                <p>Already have an account? <a href="#" onclick="toggleForms()">Login</a></p>
+            </div>
+        <!--  -->
+
+        </div>
+    <!--  -->
+
+    <!--  -->
+        <div id="homePage" class="hidden">
+            <h2>Home Page</h2>
+            <p>Welcome, you are logged in!</p>
+            <button class="btn btn-danger" onclick="logout()">Logout</button>
+        </div>
+    <!--  -->
+        
+    </div>
+    <script src="index.js"></script>
+</body>
+</html>
