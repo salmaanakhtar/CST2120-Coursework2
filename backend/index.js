@@ -1,13 +1,18 @@
 const express = require('express');
 const mongodb = require('mongodb');
+const { ObjectId } = require('mongodb');
 
 const app = express();
 const port = 8080;
 const msis = 'M00915500';
 const mongoUrl = 'mongodb+srv://akhtarsalmaan0:akhtarsalmaan0@serverlessinstance0.azj3zqe.mongodb.net/?retryWrites=true&w=majority&appName=ServerlessInstance0';
 
-// Session management
-let loggedInUsers = {};
+// Session management using userId
+let loggedInUsers = {};  // Will store as { userId: { userId: number, username: string } }
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Home route
 app.get('/', (req, res) => {
@@ -78,7 +83,10 @@ app.post(`/${msis}/login`, async (req, res) => {
         const user = await db.collection('users').findOne({ username, password });
 
         if (user) {
-            loggedInUsers[username] = true;
+            loggedInUsers[user.userId] = {
+                userId: user.userId,
+                username: user.username
+            };
             res.json({ 
                 success: true, 
                 userId: user.userId,
@@ -97,21 +105,338 @@ app.post(`/${msis}/login`, async (req, res) => {
     }
 });
 
+// Check login status
 app.get(`/${msis}/login`, (req, res) => {
-    const { username } = req.query;
+    const { userId } = req.query;
     res.json({ 
         success: true, 
-        loggedIn: !!loggedInUsers[username] 
+        loggedIn: !!loggedInUsers[userId] 
     });
 });
 
+// Logout
 app.delete(`/${msis}/login`, (req, res) => {
-    const { username } = req.body;
-    if (loggedInUsers[username]) {
-        delete loggedInUsers[username];
+    const { userId } = req.body;
+    if (loggedInUsers[userId]) {
+        delete loggedInUsers[userId];
         res.json({ success: true, message: 'Logged out successfully' });
     } else {
         res.status(400).json({ success: false, error: 'User not logged in' });
+    }
+});
+
+// Post new content
+app.post(`/${msis}/contents`, async (req, res) => {
+    const { userId, title, content } = req.body;
+
+    if (!userId || !title || !content) {
+        return res.status(400).json({
+            success: false,
+            error: 'UserId, title and content are required'
+        });
+    }
+
+    if (!loggedInUsers[userId]) {
+        return res.status(401).json({
+            success: false,
+            error: 'User must be logged in to post content'
+        });
+    }
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        const user = await db.collection('users').findOne({ userId: parseInt(userId) });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found'
+            });
+        }
+
+        const contentDoc = {
+            userId: user.userId,
+            username: user.username,
+            title,
+            content,
+            dateCreated: new Date(),
+            imageIds: []
+        };
+
+        const contentResult = await db.collection('contents').insertOne(contentDoc);
+        
+        res.json({
+            success: true,
+            contentId: contentResult.insertedId,
+            message: 'Content posted successfully. Use /contents/:contentId/images to upload images.'
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        await client.close();
+    }
+});
+
+// Upload image for content
+app.post(`/${msis}/contents/:contentId/images`, async (req, res) => {
+    const { contentId } = req.params;
+    const { userId } = req.query;
+    
+    if (!userId || !loggedInUsers[userId]) {
+        return res.status(401).json({
+            success: false,
+            error: 'User must be logged in to upload images'
+        });
+    }
+
+    let imageBuffer = Buffer.from([]);
+    let imageType = '';
+
+    // Handle the incoming multipart/form-data
+    req.on('data', chunk => {
+        imageBuffer = Buffer.concat([imageBuffer, chunk]);
+    });
+
+    req.on('end', async () => {
+        const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+        try {
+            await client.connect();
+            const db = client.db('CW2');
+
+            // Get content and verify ownership
+            const content = await db.collection('contents').findOne({
+                _id: new ObjectId(contentId)
+            });
+
+            if (!content) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Content not found'
+                });
+            }
+
+            if (content.userId !== parseInt(userId)) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Not authorized to add images to this content'
+                });
+            }
+
+            // Check if content already has 3 images
+            const imageCount = await db.collection('images.files').countDocuments({
+                'metadata.contentId': new ObjectId(contentId)
+            });
+
+            if (imageCount >= 3) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Maximum of 3 images allowed per content'
+                });
+            }
+
+            // Parse the multipart form data to extract file content and type
+            const boundary = req.headers['content-type'].split('boundary=')[1];
+            const parts = imageBuffer.toString().split(boundary);
+            
+            for (let part of parts) {
+                if (part.includes('Content-Type: image/')) {
+                    imageType = part.match(/Content-Type: (image\/[^\r\n]+)/)[1];
+                    const imageDataStart = part.indexOf('\r\n\r\n') + 4;
+                    const imageDataEnd = part.lastIndexOf('\r\n');
+                    imageBuffer = Buffer.from(part.slice(imageDataStart, imageDataEnd), 'binary');
+                    break;
+                }
+            }
+
+            if (!imageType || imageBuffer.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: 'No valid image file found in request'
+                });
+            }
+
+            // Create GridFS bucket
+            const bucket = new mongodb.GridFSBucket(db, {
+                bucketName: 'images'
+            });
+
+            // Upload image to GridFS
+            const uploadStream = bucket.openUploadStream(`image-${Date.now()}`, {
+                contentType: imageType,
+                metadata: {
+                    contentId: new ObjectId(contentId),
+                    userId: parseInt(userId),
+                    uploadDate: new Date()
+                }
+            });
+
+            // Write the image data to GridFS
+            uploadStream.write(imageBuffer);
+            uploadStream.end();
+
+            // Wait for the upload to complete
+            await new Promise((resolve, reject) => {
+                uploadStream.on('finish', resolve);
+                uploadStream.on('error', reject);
+            });
+
+            // Add image reference to content
+            await db.collection('contents').updateOne(
+                { _id: new ObjectId(contentId) },
+                { $push: { imageIds: uploadStream.id } }
+            );
+
+            res.json({
+                success: true,
+                imageId: uploadStream.id,
+                message: 'Image uploaded successfully'
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        } finally {
+            await client.close();
+        }
+    });
+});
+
+// Get image by ID
+app.get(`/${msis}/images/:imageId`, async (req, res) => {
+    const { imageId } = req.params;
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        const bucket = new mongodb.GridFSBucket(db, {
+            bucketName: 'images'
+        });
+
+        const files = await bucket.find({ _id: new ObjectId(imageId) }).toArray();
+        if (!files.length) {
+            return res.status(404).json({
+                success: false,
+                error: 'Image not found'
+            });
+        }
+
+        res.set('Content-Type', files[0].contentType);
+        bucket.openDownloadStream(new ObjectId(imageId)).pipe(res);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Get contents with optional filtering
+app.get(`/${msis}/contents`, async (req, res) => {
+    const { userId, viewUserId } = req.query;
+
+    if (!userId) {
+        return res.status(400).json({
+            success: false,
+            error: 'UserId is required'
+        });
+    }
+
+    if (!loggedInUsers[userId]) {
+        return res.status(401).json({
+            success: false,
+            error: 'User must be logged in to view contents'
+        });
+    }
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        const user = await db.collection('users').findOne({ userId: parseInt(userId) });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found'
+            });
+        }
+
+        let query = {};
+        
+        // If viewUserId is provided, show only that user's posts
+        if (viewUserId) {
+            query.userId = parseInt(viewUserId);
+        } else {
+            // Otherwise, show posts from followed users and own posts
+            query.userId = {
+                $in: [...user.following, parseInt(userId)]
+            };
+        }
+
+        const contents = await db.collection('contents')
+            .find(query)
+            .sort({ dateCreated: -1 })
+            .toArray();
+
+        // Enhance content with image URLs
+        for (let content of contents) {
+            if (content.imageIds && content.imageIds.length) {
+                content.images = content.imageIds.map(id => ({
+                    url: `/${msis}/images/${id.toString()}`,
+                    id: id.toString()
+                }));
+            }
+        }
+
+        res.json({
+            success: true,
+            contents: contents
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        await client.close();
+    }
+});
+
+// Add a helper endpoint to get all contents (for testing)
+app.get(`/${msis}/contents/all`, async (req, res) => {
+    const { userId } = req.query;
+
+    if (!userId || !loggedInUsers[userId]) {
+        return res.status(401).json({
+            success: false,
+            error: 'User must be logged in to view contents'
+        });
+    }
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        const contents = await db.collection('contents')
+            .find({})
+            .sort({ dateCreated: -1 })
+            .toArray();
+
+        // Enhance content with image URLs
+        for (let content of contents) {
+            if (content.imageIds && content.imageIds.length) {
+                content.images = content.imageIds.map(id => ({
+                    url: `/${msis}/images/${id.toString()}`,
+                    id: id.toString()
+                }));
+            }
+        }
+
+        res.json({
+            success: true,
+            contents: contents
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        await client.close();
     }
 });
 
@@ -123,4 +448,8 @@ app.listen(port, () => {
     console.log(`POST /${msis}/login - User login`);
     console.log(`GET /${msis}/login - Check login status`);
     console.log(`DELETE /${msis}/login - User logout`);
+    console.log(`POST /${msis}/contents - Create new content`);
+    console.log(`POST /${msis}/contents/:contentId/images - Upload image to content`);
+    console.log(`GET /${msis}/images/:imageId - Get image`);
+    console.log(`GET /${msis}/contents - Get contents from followed users`);
 });
