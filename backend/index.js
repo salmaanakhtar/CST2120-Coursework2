@@ -440,6 +440,157 @@ app.get(`/${msis}/contents/all`, async (req, res) => {
     }
 });
 
+// Follow a user (supports both JSON body and URL parameter)
+app.post(`/${msis}/follow/:userToFollowId?`, async (req, res) => {
+    // Get the user to follow from either URL parameter or JSON body
+    let userToFollowId = req.params.userToFollowId;
+    const { userId } = req.body;
+    
+    // If not in URL, check JSON body
+    if (!userToFollowId && req.body.userToFollowId) {
+        userToFollowId = req.body.userToFollowId;
+    }
+
+    if (!userId || !userToFollowId) {
+        return res.status(400).json({
+            success: false,
+            error: 'Both userId and userToFollowId are required'
+        });
+    }
+
+    if (!loggedInUsers[userId]) {
+        return res.status(401).json({
+            success: false,
+            error: 'User must be logged in to follow others'
+        });
+    }
+
+    if (parseInt(userId) === parseInt(userToFollowId)) {
+        return res.status(400).json({
+            success: false,
+            error: 'Cannot follow yourself'
+        });
+    }
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        // Check if both users exist
+        const user = await db.collection('users').findOne({ userId: parseInt(userId) });
+        const userToFollow = await db.collection('users').findOne({ userId: parseInt(userToFollowId) });
+
+        if (!user || !userToFollow) {
+            return res.status(404).json({
+                success: false,
+                error: 'One or both users not found'
+            });
+        }
+
+        // Check if already following
+        if (user.following.includes(parseInt(userToFollowId))) {
+            return res.status(400).json({
+                success: false,
+                error: 'Already following this user'
+            });
+        }
+
+        // Add to following list
+        await db.collection('users').updateOne(
+            { userId: parseInt(userId) },
+            { $push: { following: parseInt(userToFollowId) } }
+        );
+
+        res.json({
+            success: true,
+            message: `Successfully followed user ${userToFollowId}`,
+            details: {
+                followerId: parseInt(userId),
+                followingId: parseInt(userToFollowId),
+                followerUsername: user.username,
+                followingUsername: userToFollow.username
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        await client.close();
+    }
+});
+
+// Unfollow a user (supports both JSON body and URL parameter)
+app.delete(`/${msis}/follow/:userToUnfollowId?`, async (req, res) => {
+    // Get the user to unfollow from either URL parameter or JSON body
+    let userToUnfollowId = req.params.userToUnfollowId;
+    const { userId } = req.body;
+    
+    // If not in URL, check JSON body
+    if (!userToUnfollowId && req.body.userToUnfollowId) {
+        userToUnfollowId = req.body.userToUnfollowId;
+    }
+
+    if (!userId || !userToUnfollowId) {
+        return res.status(400).json({
+            success: false,
+            error: 'Both userId and userToUnfollowId are required'
+        });
+    }
+
+    if (!loggedInUsers[userId]) {
+        return res.status(401).json({
+            success: false,
+            error: 'User must be logged in to unfollow others'
+        });
+    }
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        // Check if both users exist
+        const user = await db.collection('users').findOne({ userId: parseInt(userId) });
+        const userToUnfollow = await db.collection('users').findOne({ userId: parseInt(userToUnfollowId) });
+
+        if (!user || !userToUnfollow) {
+            return res.status(404).json({
+                success: false,
+                error: 'One or both users not found'
+            });
+        }
+
+        // Check if actually following
+        if (!user.following.includes(parseInt(userToUnfollowId))) {
+            return res.status(400).json({
+                success: false,
+                error: 'Not currently following this user'
+            });
+        }
+
+        // Remove from following list
+        await db.collection('users').updateOne(
+            { userId: parseInt(userId) },
+            { $pull: { following: parseInt(userToUnfollowId) } }
+        );
+
+        res.json({
+            success: true,
+            message: `Successfully unfollowed user ${userToUnfollowId}`,
+            details: {
+                unfollowerId: parseInt(userId),
+                unfollowedId: parseInt(userToUnfollowId),
+                unfollowerUsername: user.username,
+                unfollowedUsername: userToUnfollow.username
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        await client.close();
+    }
+});
+
 // Start server
 app.listen(port, () => {
     console.log(`Server is running at http://localhost:${port}`);
