@@ -7,6 +7,32 @@ const port = 8080;
 const msis = 'M00915500';
 const mongoUrl = 'mongodb+srv://akhtarsalmaan0:akhtarsalmaan0@serverlessinstance0.azj3zqe.mongodb.net/?retryWrites=true&w=majority&appName=ServerlessInstance0';
 
+async function createIndexes() {
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+        
+        // Create text index for users collection
+        await db.collection('users').createIndex({
+            username: "text",
+            email: "text"
+        });
+        
+        // Create text index for contents collection
+        await db.collection('contents').createIndex({
+            title: "text",
+            content: "text"
+        });
+        
+        console.log("Search indexes created successfully");
+    } catch (error) {
+        console.error("Error creating indexes:", error);
+    } finally {
+        await client.close();
+    }
+}
+
 // Session management using userId
 let loggedInUsers = {};  // Will store as { userId: { userId: number, username: string } }
 
@@ -179,33 +205,53 @@ app.post(`/${msis}/contents`, async (req, res) => {
     }
 });
 
-// Upload image for content
-app.post(`/${msis}/contents/:contentId/images`, async (req, res) => {
-    const { contentId } = req.params;
-    const { userId } = req.query;
-    
-    if (!userId || !loggedInUsers[userId]) {
-        return res.status(401).json({
-            success: false,
-            error: 'User must be logged in to upload images'
-        });
+// Updated image upload endpoint using multer for handling multipart form data
+const multer = require('multer');
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only image files are allowed'));
+        }
     }
+}).single('image');
 
-    let imageBuffer = Buffer.from([]);
-    let imageType = '';
+app.post(`/${msis}/contents/:contentId/images`, (req, res) => {
+    upload(req, res, async (err) => {
+        if (err) {
+            return res.status(400).json({
+                success: false,
+                error: err.message
+            });
+        }
 
-    // Handle the incoming multipart/form-data
-    req.on('data', chunk => {
-        imageBuffer = Buffer.concat([imageBuffer, chunk]);
-    });
+        const { contentId } = req.params;
+        const { userId } = req.query;
 
-    req.on('end', async () => {
+        if (!userId || !loggedInUsers[userId]) {
+            return res.status(401).json({
+                success: false,
+                error: 'User must be logged in to upload images'
+            });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: 'Image file is required'
+            });
+        }
+
         const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
         try {
             await client.connect();
             const db = client.db('CW2');
 
-            // Get content and verify ownership
             const content = await db.collection('contents').findOne({
                 _id: new ObjectId(contentId)
             });
@@ -224,7 +270,6 @@ app.post(`/${msis}/contents/:contentId/images`, async (req, res) => {
                 });
             }
 
-            // Check if content already has 3 images
             const imageCount = await db.collection('images.files').countDocuments({
                 'metadata.contentId': new ObjectId(contentId)
             });
@@ -236,61 +281,42 @@ app.post(`/${msis}/contents/:contentId/images`, async (req, res) => {
                 });
             }
 
-            // Parse the multipart form data to extract file content and type
-            const boundary = req.headers['content-type'].split('boundary=')[1];
-            const parts = imageBuffer.toString().split(boundary);
-            
-            for (let part of parts) {
-                if (part.includes('Content-Type: image/')) {
-                    imageType = part.match(/Content-Type: (image\/[^\r\n]+)/)[1];
-                    const imageDataStart = part.indexOf('\r\n\r\n') + 4;
-                    const imageDataEnd = part.lastIndexOf('\r\n');
-                    imageBuffer = Buffer.from(part.slice(imageDataStart, imageDataEnd), 'binary');
-                    break;
-                }
-            }
-
-            if (!imageType || imageBuffer.length === 0) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'No valid image file found in request'
-                });
-            }
-
-            // Create GridFS bucket
             const bucket = new mongodb.GridFSBucket(db, {
                 bucketName: 'images'
             });
 
-            // Upload image to GridFS
-            const uploadStream = bucket.openUploadStream(`image-${Date.now()}`, {
-                contentType: imageType,
+            const uploadStream = bucket.openUploadStream(req.file.originalname, {
+                contentType: req.file.mimetype,
                 metadata: {
                     contentId: new ObjectId(contentId),
                     userId: parseInt(userId),
-                    uploadDate: new Date()
+                    uploadDate: new Date(),
+                    filename: req.file.originalname
                 }
             });
 
-            // Write the image data to GridFS
-            uploadStream.write(imageBuffer);
-            uploadStream.end();
-
-            // Wait for the upload to complete
-            await new Promise((resolve, reject) => {
-                uploadStream.on('finish', resolve);
+            // Create a promise to handle the stream completion
+            const uploadPromise = new Promise((resolve, reject) => {
+                uploadStream.on('finish', () => resolve(uploadStream.id));
                 uploadStream.on('error', reject);
             });
 
-            // Add image reference to content
+            // Write the buffer to the stream
+            uploadStream.write(req.file.buffer);
+            uploadStream.end();
+
+            // Wait for the upload to complete
+            const imageId = await uploadPromise;
+
+            // Update the content document with the new image ID
             await db.collection('contents').updateOne(
                 { _id: new ObjectId(contentId) },
-                { $push: { imageIds: uploadStream.id } }
+                { $push: { imageIds: imageId } }
             );
 
             res.json({
                 success: true,
-                imageId: uploadStream.id,
+                imageId: imageId.toString(),
                 message: 'Image uploaded successfully'
             });
         } catch (error) {
@@ -301,7 +327,7 @@ app.post(`/${msis}/contents/:contentId/images`, async (req, res) => {
     });
 });
 
-// Get image by ID
+// Updated image retrieval endpoint
 app.get(`/${msis}/images/:imageId`, async (req, res) => {
     const { imageId } = req.params;
 
@@ -314,19 +340,37 @@ app.get(`/${msis}/images/:imageId`, async (req, res) => {
             bucketName: 'images'
         });
 
-        const files = await bucket.find({ _id: new ObjectId(imageId) }).toArray();
-        if (!files.length) {
+        // Get file metadata
+        const file = await db.collection('images.files').findOne({ 
+            _id: new ObjectId(imageId) 
+        });
+        
+        if (!file) {
             return res.status(404).json({
                 success: false,
                 error: 'Image not found'
             });
         }
 
-        res.set('Content-Type', files[0].contentType);
-        bucket.openDownloadStream(new ObjectId(imageId)).pipe(res);
+        // Set response headers
+        res.set({
+            'Content-Type': file.contentType,
+            'Content-Length': file.length,
+            'Content-Disposition': `inline; filename="${file.metadata.filename}"`,
+            'Cache-Control': 'public, max-age=31557600' // Cache for 1 year
+        });
+
+        // Stream the image data
+        const downloadStream = bucket.openDownloadStream(new ObjectId(imageId));
+        downloadStream.on('error', (error) => {
+            res.status(500).json({ success: false, error: error.message });
+        });
+
+        downloadStream.pipe(res);
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
+    // Note: Don't close the client here as it would interrupt the stream
 });
 
 // Get contents with optional filtering
@@ -591,8 +635,139 @@ app.delete(`/${msis}/follow/:userToUnfollowId?`, async (req, res) => {
     }
 });
 
+app.get(`/${msis}/users/search`, async (req, res) => {
+    const { q: searchQuery } = req.query;
+    const { userId } = req.query; // For authentication
+
+    if (!searchQuery) {
+        return res.status(400).json({
+            success: false,
+            error: 'Search query is required'
+        });
+    }
+
+    if (!userId || !loggedInUsers[userId]) {
+        return res.status(401).json({
+            success: false,
+            error: 'User must be logged in to search'
+        });
+    }
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        // Perform text search
+        const users = await db.collection('users')
+            .find(
+                {
+                    $text: { $search: searchQuery }
+                },
+                {
+                    projection: {
+                        _id: 1,
+                        userId: 1,
+                        username: 1,
+                        dateCreated: 1,
+                        score: { $meta: "textScore" }
+                    }
+                }
+            )
+            .sort({ score: { $meta: "textScore" } })
+            .toArray();
+
+        // Get current user's following list
+        const currentUser = await db.collection('users').findOne({ userId: parseInt(userId) });
+        
+        // Add isFollowing flag to results
+        const usersWithFollowStatus = users.map(user => ({
+            ...user,
+            isFollowing: currentUser.following.includes(user.userId),
+            // Remove sensitive information
+            password: undefined,
+            email: undefined
+        }));
+
+        res.json({
+            success: true,
+            query: searchQuery,
+            results: usersWithFollowStatus
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        await client.close();
+    }
+});
+
+// Search contents endpoint
+app.get(`/${msis}/contents/search`, async (req, res) => {
+    const { q: searchQuery } = req.query;
+    const { userId } = req.query; // For authentication
+
+    if (!searchQuery) {
+        return res.status(400).json({
+            success: false,
+            error: 'Search query is required'
+        });
+    }
+
+    if (!userId || !loggedInUsers[userId]) {
+        return res.status(401).json({
+            success: false,
+            error: 'User must be logged in to search'
+        });
+    }
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        // Perform text search on contents
+        const contents = await db.collection('contents')
+            .find(
+                {
+                    $text: { $search: searchQuery }
+                },
+                {
+                    projection: {
+                        score: { $meta: "textScore" }
+                    }
+                }
+            )
+            .sort({ score: { $meta: "textScore" } })
+            .toArray();
+
+        // Get current user's following list for reference
+        const currentUser = await db.collection('users').findOne({ userId: parseInt(userId) });
+
+        // Add additional context to each content item
+        const enhancedContents = contents.map(content => ({
+            ...content,
+            isFromFollowedUser: currentUser.following.includes(content.userId),
+            images: content.imageIds ? content.imageIds.map(id => ({
+                url: `/${msis}/images/${id.toString()}`,
+                id: id.toString()
+            })) : []
+        }));
+
+        res.json({
+            success: true,
+            query: searchQuery,
+            results: enhancedContents
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        await client.close();
+    }
+});
+
 // Start server
 app.listen(port, () => {
+    createIndexes();
     console.log(`Server is running at http://localhost:${port}`);
     console.log('\nAvailable endpoints:');
     console.log(`POST /${msis}/users - Register new user`);
@@ -604,3 +779,4 @@ app.listen(port, () => {
     console.log(`GET /${msis}/images/:imageId - Get image`);
     console.log(`GET /${msis}/contents - Get contents from followed users`);
 });
+
