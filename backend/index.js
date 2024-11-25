@@ -1,5 +1,8 @@
 const express = require('express');
 const mongodb = require('mongodb');
+const bcrypt = require('bcrypt');
+const path = require('path'); // Import the path module
+const User = require('./models/userModel');
 const { ObjectId } = require('mongodb');
 
 const app = express();
@@ -39,21 +42,19 @@ let loggedInUsers = {};  // Will store as { userId: { userId: number, username: 
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Home route
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/index.html'));
-});
+    res.sendFile(path.join(__dirname, '../frontend', 'index.html'));
+});;
 
-// User Registration
+// POST: User Registration
 app.post(`/${msis}/users`, async (req, res) => {
     const { username, email, password } = req.body;
 
     if (!username || !email || !password) {
-        return res.status(400).json({ 
-            success: false, 
-            error: 'Username, email, and password are required' 
-        });
+        return res.status(400).json({ success: false, error: 'Username, email, and password are required' });
     }
 
     const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
@@ -70,6 +71,9 @@ app.post(`/${msis}/users`, async (req, res) => {
             });
         }
 
+        // Hash the password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
         const lastUser = await db.collection('users').find().sort({ userId: -1 }).limit(1).toArray();
         const userId = lastUser.length > 0 ? lastUser[0].userId + 1 : 1;
 
@@ -77,7 +81,7 @@ app.post(`/${msis}/users`, async (req, res) => {
             userId,
             username,
             email,
-            password,
+            password: hashedPassword,
             following: [],
             dateCreated: new Date()
         };
@@ -91,38 +95,25 @@ app.post(`/${msis}/users`, async (req, res) => {
     }
 });
 
-// Login Management
+// POST: User Login
 app.post(`/${msis}/login`, async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-        return res.status(400).json({ 
-            success: false, 
-            error: 'Username and password are required' 
-        });
+        return res.status(400).json({ success: false, error: 'Username and password are required' });
     }
 
     const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
     try {
         await client.connect();
         const db = client.db('CW2');
-        const user = await db.collection('users').findOne({ username, password });
+        const user = await db.collection('users').findOne({ username });
 
-        if (user) {
-            loggedInUsers[user.userId] = {
-                userId: user.userId,
-                username: user.username
-            };
-            res.json({ 
-                success: true, 
-                userId: user.userId,
-                message: 'Logged in successfully' 
-            });
+        if (user && await bcrypt.compare(password, user.password)) {
+            loggedInUsers[user.userId] = true;
+            res.json({ success: true, message: 'Logged in successfully', userId: user.userId });
         } else {
-            res.status(401).json({ 
-                success: false, 
-                error: 'Invalid username or password' 
-            });
+            res.status(401).json({ success: false, error: 'Invalid username or password' });
         }
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -140,9 +131,10 @@ app.get(`/${msis}/login`, (req, res) => {
     });
 });
 
-// Logout
+// DELETE: User Logout
 app.delete(`/${msis}/login`, (req, res) => {
     const { userId } = req.body;
+
     if (loggedInUsers[userId]) {
         delete loggedInUsers[userId];
         res.json({ success: true, message: 'Logged out successfully' });
@@ -150,7 +142,6 @@ app.delete(`/${msis}/login`, (req, res) => {
         res.status(400).json({ success: false, error: 'User not logged in' });
     }
 });
-
 // Post new content
 app.post(`/${msis}/contents`, async (req, res) => {
     const { userId, title, content } = req.body;
@@ -221,6 +212,7 @@ const upload = multer({
     }
 }).single('image');
 
+//Attach Image To Content
 app.post(`/${msis}/contents/:contentId/images`, (req, res) => {
     upload(req, res, async (err) => {
         if (err) {
@@ -627,6 +619,65 @@ app.delete(`/${msis}/follow/:userToUnfollowId?`, async (req, res) => {
                 unfollowerUsername: user.username,
                 unfollowedUsername: userToUnfollow.username
             }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        await client.close();
+    }
+});
+
+
+// GET: Fetch posts from followed users
+app.get(`/${msis}/users/:userId/following/posts`, async (req, res) => {
+    const { userId } = req.params;
+
+    if (!loggedInUsers[userId]) {
+        return res.status(401).json({
+            success: false,
+            error: 'User must be logged in to view posts'
+        });
+    }
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        const user = await db.collection('users').findOne({ userId: parseInt(userId) });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found'
+            });
+        }
+
+        // Fetch posts from followed users and own posts
+        const followedUserIds = user.following || [];
+        const query = {
+            userId: {
+                $in: [...followedUserIds, parseInt(userId)]
+            }
+        };
+
+        const contents = await db.collection('contents')
+            .find(query)
+            .sort({ dateCreated: -1 })
+            .toArray();
+
+        // Enhance content with image URLs
+        for (let content of contents) {
+            if (content.imageIds && content.imageIds.length) {
+                content.images = content.imageIds.map(id => ({
+                    url: `http://localhost:8080/${msis}/images/${id.toString()}`,
+                    id: id.toString()
+                }));
+            }
+        }
+
+        res.json({
+            success: true,
+            contents: contents
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
