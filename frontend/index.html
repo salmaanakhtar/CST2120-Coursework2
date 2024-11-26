@@ -75,26 +75,28 @@
                 <button type="submit" class="btn btn-primary">Create Post</button>
             </form>
         
-            <h3>Search Users</h3>
-            <form id="searchUsersForm">
+            <form id="searchForm">
                 <div class="form-group">
-                    <label for="searchUsersQuery">Search:</label>
-                    <input type="text" class="form-control" id="searchUsersQuery" name="query" required>
+                    <label for="searchQuery">Search:</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="searchQuery" name="query" required>
+                        <div class="input-group-append">
+                            <select class="form-control" id="searchType">
+                                <option value="users">Users</option>
+                                <option value="contents">Contents</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-primary">Search</button>
             </form>
-            <div id="searchUsersResults"></div>
-        
-            <h3>Search Contents</h3>
-            <form id="searchContentsForm">
-                <div class="form-group">
-                    <label for="searchContentsQuery">Search:</label>
-                    <input type="text" class="form-control" id="searchContentsQuery" name="query" required>
-                </div>
-                <button type="submit" class="btn btn-primary">Search</button>
-            </form>
-            <div id="searchContentsResults"></div>
-        
+            <div id="searchResults"></div>
+            
+            <div class="d-flex justify-content-center mb-3">
+                <button id="forYouBtn" class="btn btn-secondary" onclick="showForYouPage()">For You</button>
+                <button id="followingBtn" class="btn btn-primary" onclick="showFollowingPage()">Following</button>
+            </div>
+            
             <div id="postsContainer"></div>
         </div>
     </div>

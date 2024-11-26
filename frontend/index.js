@@ -232,30 +232,55 @@ document.addEventListener('DOMContentLoaded', function() {
         showHomePage(userId);
     });
 
-    document.getElementById('searchUsersForm').addEventListener('submit', function(event) {
+    document.getElementById('searchForm').addEventListener('submit', function(event) {
         event.preventDefault();
         const userId = localStorage.getItem('userId');
-        const query = document.getElementById('searchUsersQuery').value;
+        const query = document.getElementById('searchQuery').value;
+        const searchType = document.getElementById('searchType').value;
 
         const xhr = new XMLHttpRequest();
-        xhr.open('GET', `/M00915500/users/search?q=${query}&userId=${userId}`, true);
+        xhr.open('GET', `/M00915500/${searchType}/search?q=${query}&userId=${userId}`, true);
         xhr.onreadystatechange = function() {
             if (xhr.readyState === 4) {
                 const result = JSON.parse(xhr.responseText);
                 if (result.success) {
-                    const searchUsersResults = document.getElementById('searchUsersResults');
-                    searchUsersResults.innerHTML = '';
-                    result.results.forEach(user => {
-                        const userElement = document.createElement('div');
-                        userElement.className = 'user';
-                        userElement.innerHTML = `
-                            <p>${user.username}</p>
-                            <button class="btn btn-${user.isFollowing ? 'danger' : 'primary'}" onclick="${user.isFollowing ? 'unfollowUser' : 'followUser'}(${user.userId})">
-                                ${user.isFollowing ? 'Unfollow' : 'Follow'}
-                            </button>
-                        `;
-                        searchUsersResults.appendChild(userElement);
-                    });
+                    const searchResults = document.getElementById('searchResults');
+                    searchResults.innerHTML = '';
+                    if (searchType === 'users') {
+                        result.results.forEach(user => {
+                            const userElement = document.createElement('div');
+                            userElement.className = 'user';
+                            userElement.innerHTML = `
+                                <p>${user.username}</p>
+                                <button class="btn btn-${user.isFollowing ? 'danger' : 'primary'}" onclick="${user.isFollowing ? 'unfollowUser' : 'followUser'}(${user.userId})">
+                                    ${user.isFollowing ? 'Unfollow' : 'Follow'}
+                                </button>
+                            `;
+                            searchResults.appendChild(userElement);
+                        });
+                    } else if (searchType === 'contents') {
+                        result.results.forEach(content => {
+                            const contentElement = document.createElement('div');
+                            contentElement.className = 'card mb-3';
+                            contentElement.innerHTML = `
+                                <div class="card-body">
+                                    <h3 class="card-title">${content.title}</h3>
+                                    <p class="card-text">${content.content}</p>
+                                    <small class="text-muted">Posted by ${content.username} on ${new Date(content.dateCreated).toLocaleString()}</small>
+                                </div>
+                            `;
+                            if (content.images && content.images.length) {
+                                content.images.forEach(image => {
+                                    const imgElement = document.createElement('img');
+                                    imgElement.src = image.url;
+                                    imgElement.alt = 'Content Image';
+                                    imgElement.className = 'card-img-top';
+                                    contentElement.insertBefore(imgElement, contentElement.firstChild);
+                                });
+                            }
+                            searchResults.appendChild(contentElement);
+                        });
+                    }
                 } else {
                     alert(result.error);
                 }
@@ -264,37 +289,66 @@ document.addEventListener('DOMContentLoaded', function() {
         xhr.send();
     });
 
-    document.getElementById('searchContentsForm').addEventListener('submit', function(event) {
-        event.preventDefault();
-        const userId = localStorage.getItem('userId');
-        const query = document.getElementById('searchContentsQuery').value;
+    
 
+    window.showForYouPage = function() {
+        document.getElementById('forYouBtn').classList.add('btn-primary');
+        document.getElementById('forYouBtn').classList.remove('btn-secondary');
+        document.getElementById('followingBtn').classList.add('btn-secondary');
+        document.getElementById('followingBtn').classList.remove('btn-primary');
+        fetchAndDisplayForYouPosts();
+    };
+
+    window.showFollowingPage = function() {
+        document.getElementById('followingBtn').classList.add('btn-primary');
+        document.getElementById('followingBtn').classList.remove('btn-secondary');
+        document.getElementById('forYouBtn').classList.add('btn-secondary');
+        document.getElementById('forYouBtn').classList.remove('btn-primary');
+        const userId = localStorage.getItem('userId');
+        fetchAndDisplayPosts(userId);
+    };
+
+    function fetchAndDisplayPosts(userId) {
+        // Fetch and display posts from followed users
         const xhr = new XMLHttpRequest();
-        xhr.open('GET', `/M00915500/contents/search?q=${query}&userId=${userId}`, true);
+        xhr.open('GET', `/M00915500/users/${userId}/following/posts`, true);
         xhr.onreadystatechange = function() {
             if (xhr.readyState === 4) {
                 const result = JSON.parse(xhr.responseText);
                 if (result.success) {
-                    const searchContentsResults = document.getElementById('searchContentsResults');
-                    searchContentsResults.innerHTML = '';
-                    result.results.forEach(content => {
-                        const contentElement = document.createElement('div');
-                        contentElement.className = 'content';
-                        contentElement.innerHTML = `
-                            <h3>${content.title}</h3>
-                            <p>${content.content}</p>
-                            <small>Posted by ${content.username} on ${new Date(content.dateCreated).toLocaleString()}</small>
+                    const postsContainer = document.getElementById('postsContainer');
+                    postsContainer.innerHTML = '';
+                    result.contents.forEach(post => {
+                        const postElement = document.createElement('div');
+                        postElement.className = 'card mb-3';
+                        postElement.innerHTML = `
+                            <div class="card-body">
+                                <h3 class="card-title">${post.title}</h3>
+                                <p class="card-text">${post.content}</p>
+                                <small class="text-muted">Posted by ${post.username} on ${new Date(post.dateCreated).toLocaleString()}</small>
+                                <button class="btn btn-primary" onclick="likePost('${post._id}')">Like</button>
+                                <span>${post.likes.length} Likes</span>
+                                <form onsubmit="addComment(event, '${post._id}')">
+                                    <input type="text" placeholder="Add a comment" required>
+                                    <button type="submit" class="btn btn-primary">Comment</button>
+                                </form>
+                                <div class="comments">
+                                    ${post.comments.map(comment => `
+                                        <p><strong>${comment.userId}:</strong> ${comment.comment}</p>
+                                    `).join('')}
+                                </div>
+                            </div>
                         `;
-                        if (content.images && content.images.length) {
-                            content.images.forEach(image => {
+                        if (post.images && post.images.length) {
+                            post.images.forEach(image => {
                                 const imgElement = document.createElement('img');
                                 imgElement.src = image.url;
-                                imgElement.alt = 'Content Image';
-                                imgElement.style.maxWidth = '100%';
-                                contentElement.appendChild(imgElement);
+                                imgElement.alt = 'Post Image';
+                                imgElement.className = 'card-img-top';
+                                postElement.insertBefore(imgElement, postElement.firstChild);
                             });
                         }
-                        searchContentsResults.appendChild(contentElement);
+                        postsContainer.appendChild(postElement);
                     });
                 } else {
                     alert(result.error);
@@ -302,7 +356,56 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         };
         xhr.send();
-    });
+    }
+
+    function fetchAndDisplayForYouPosts() {
+        const xhr = new XMLHttpRequest();
+        xhr.open('GET', `/M00915500/contents/forYou`, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                const result = JSON.parse(xhr.responseText);
+                if (result.success) {
+                    const postsContainer = document.getElementById('postsContainer');
+                    postsContainer.innerHTML = '';
+                    result.contents.forEach(post => {
+                        const postElement = document.createElement('div');
+                        postElement.className = 'card mb-3';
+                        postElement.innerHTML = `
+                            <div class="card-body">
+                                <h3 class="card-title">${post.title}</h3>
+                                <p class="card-text">${post.content}</p>
+                                <small class="text-muted">Posted by ${post.username} on ${new Date(post.dateCreated).toLocaleString()}</small>
+                                <button class="btn btn-primary" onclick="likePost('${post._id}')">Like</button>
+                                <span>${post.likes.length} Likes</span>
+                                <form onsubmit="addComment(event, '${post._id}')">
+                                    <input type="text" placeholder="Add a comment" required>
+                                    <button type="submit" class="btn btn-primary">Comment</button>
+                                </form>
+                                <div class="comments">
+                                    ${post.comments.map(comment => `
+                                        <p><strong>${comment.userId}:</strong> ${comment.comment}</p>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `;
+                        if (post.images && post.images.length) {
+                            post.images.forEach(image => {
+                                const imgElement = document.createElement('img');
+                                imgElement.src = image.url;
+                                imgElement.alt = 'Post Image';
+                                imgElement.className = 'card-img-top';
+                                postElement.insertBefore(imgElement, postElement.firstChild);
+                            });
+                        }
+                        postsContainer.appendChild(postElement);
+                    });
+                } else {
+                    alert(result.error);
+                }
+            }
+        };
+        xhr.send();
+    }
 
     window.toggleForms = toggleForms;
     window.logout = logout;
@@ -344,4 +447,5 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     window.likePost = likePost;
     window.addComment = addComment;
+    showFollowingPage();
 });

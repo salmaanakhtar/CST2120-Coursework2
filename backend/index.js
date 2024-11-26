@@ -479,6 +479,32 @@ app.get(`/${msis}/contents/all`, async (req, res) => {
     }
 });
 
+//Custom endpoint to get contents for a fyp
+app.get(`/${msis}/contents/forYou`, async (req, res) => {
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+        const contents = await db.collection('contents').aggregate([{ $sample: { size: 10 } }]).toArray();
+
+        // Enhance content with image URLs
+        for (let content of contents) {
+            if (content.imageIds && content.imageIds.length) {
+                content.images = content.imageIds.map(id => ({
+                    url: `http://localhost:8080/${msis}/images/${id.toString()}`,
+                    id: id.toString()
+                }));
+            }
+        }
+
+        res.json({ success: true, contents });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    } finally {
+        await client.close();
+    }
+});
+
 // Like a post
 app.post(`/${msis}/contents/:contentId/like`, async (req, res) => {
     const { contentId } = req.params;
