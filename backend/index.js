@@ -142,6 +142,7 @@ app.delete(`/${msis}/login`, (req, res) => {
         res.status(400).json({ success: false, error: 'User not logged in' });
     }
 });
+
 // Post new content
 app.post(`/${msis}/contents`, async (req, res) => {
     const { userId, title, content } = req.body;
@@ -179,7 +180,9 @@ app.post(`/${msis}/contents`, async (req, res) => {
             title,
             content,
             dateCreated: new Date(),
-            imageIds: []
+            imageIds: [],
+            likes: [],
+            comments: []
         };
 
         const contentResult = await db.collection('contents').insertOne(contentDoc);
@@ -476,6 +479,104 @@ app.get(`/${msis}/contents/all`, async (req, res) => {
     }
 });
 
+// Like a post
+app.post(`/${msis}/contents/:contentId/like`, async (req, res) => {
+    const { contentId } = req.params;
+    const { userId } = req.body;
+
+    if (!userId || !loggedInUsers[userId]) {
+        return res.status(401).json({
+            success: false,
+            error: 'User must be logged in to like posts'
+        });
+    }
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        const content = await db.collection('contents').findOne({ _id: new ObjectId(contentId) });
+        if (!content) {
+            return res.status(404).json({
+                success: false,
+                error: 'Content not found'
+            });
+        }
+
+        // Add userId to likes array if not already liked
+        if (!content.likes.includes(parseInt(userId))) {
+            await db.collection('contents').updateOne(
+                { _id: new ObjectId(contentId) },
+                { $push: { likes: parseInt(userId) } }
+            );
+        }
+
+        res.json({
+            success: true,
+            message: 'Post liked successfully'
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        await client.close();
+    }
+});
+
+// Comment on a post
+app.post(`/${msis}/contents/:contentId/comment`, async (req, res) => {
+    const { contentId } = req.params;
+    const { userId, comment } = req.body;
+
+    if (!userId || !loggedInUsers[userId]) {
+        return res.status(401).json({
+            success: false,
+            error: 'User must be logged in to comment on posts'
+        });
+    }
+
+    if (!comment) {
+        return res.status(400).json({
+            success: false,
+            error: 'Comment is required'
+        });
+    }
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        const content = await db.collection('contents').findOne({ _id: new ObjectId(contentId) });
+        if (!content) {
+            return res.status(404).json({
+                success: false,
+                error: 'Content not found'
+            });
+        }
+
+        const commentDoc = {
+            userId: parseInt(userId),
+            comment,
+            dateCreated: new Date()
+        };
+
+        await db.collection('contents').updateOne(
+            { _id: new ObjectId(contentId) },
+            { $push: { comments: commentDoc } }
+        );
+
+        res.json({
+            success: true,
+            message: 'Comment added successfully'
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        await client.close();
+    }
+});
+
 // Follow a user (supports both JSON body and URL parameter)
 app.post(`/${msis}/follow/:userToFollowId?`, async (req, res) => {
     // Get the user to follow from either URL parameter or JSON body
@@ -627,7 +728,6 @@ app.delete(`/${msis}/follow/:userToUnfollowId?`, async (req, res) => {
     }
 });
 
-
 // GET: Fetch posts from followed users
 app.get(`/${msis}/users/:userId/following/posts`, async (req, res) => {
     const { userId } = req.params;
@@ -686,11 +786,14 @@ app.get(`/${msis}/users/:userId/following/posts`, async (req, res) => {
     }
 });
 
+// Search users endpoint
 app.get(`/${msis}/users/search`, async (req, res) => {
-    const { q: searchQuery } = req.query;
-    const { userId } = req.query; // For authentication
+    const { q: searchQuery, userId } = req.query;
+
+    console.log(`Received search request with query: ${searchQuery} and userId: ${userId}`);
 
     if (!searchQuery) {
+        console.log('Search query is required');
         return res.status(400).json({
             success: false,
             error: 'Search query is required'
@@ -698,6 +801,7 @@ app.get(`/${msis}/users/search`, async (req, res) => {
     }
 
     if (!userId || !loggedInUsers[userId]) {
+        console.log('User must be logged in to search');
         return res.status(401).json({
             success: false,
             error: 'User must be logged in to search'
@@ -709,41 +813,75 @@ app.get(`/${msis}/users/search`, async (req, res) => {
         await client.connect();
         const db = client.db('CW2');
 
-        // Perform text search
+        console.log('Connected to database');
+
+        // Perform regex search on usernames
         const users = await db.collection('users')
-            .find(
-                {
-                    $text: { $search: searchQuery }
-                },
-                {
-                    projection: {
-                        _id: 1,
-                        userId: 1,
-                        username: 1,
-                        dateCreated: 1,
-                        score: { $meta: "textScore" }
-                    }
-                }
-            )
-            .sort({ score: { $meta: "textScore" } })
+            .find({ username: { $regex: searchQuery, $options: 'i' } })
             .toArray();
+
+        console.log(`Found users: ${JSON.stringify(users)}`);
 
         // Get current user's following list
         const currentUser = await db.collection('users').findOne({ userId: parseInt(userId) });
-        
+
+        if (!currentUser) {
+            console.log('Current user not found');
+            return res.status(404).json({
+                success: false,
+                error: 'Current user not found'
+            });
+        }
+
+        console.log(`Current user: ${JSON.stringify(currentUser)}`);
+
         // Add isFollowing flag to results
         const usersWithFollowStatus = users.map(user => ({
-            ...user,
-            isFollowing: currentUser.following.includes(user.userId),
-            // Remove sensitive information
-            password: undefined,
-            email: undefined
+            userId: user.userId,
+            username: user.username,
+            isFollowing: currentUser.following.includes(user.userId)
         }));
+
+        console.log(`Users with follow status: ${JSON.stringify(usersWithFollowStatus)}`);
 
         res.json({
             success: true,
             query: searchQuery,
             results: usersWithFollowStatus
+        });
+    } catch (error) {
+        console.log(`Error: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        await client.close();
+        console.log('Database connection closed');
+    }
+});
+
+// GET: Fetch user details
+app.get(`/${msis}/users/:userId`, async (req, res) => {
+    const { userId } = req.params;
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        const user = await db.collection('users').findOne({ userId: parseInt(userId) });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            user: {
+                userId: user.userId,
+                username: user.username,
+                email: user.email
+            }
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

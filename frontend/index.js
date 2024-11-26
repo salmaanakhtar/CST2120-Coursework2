@@ -10,6 +10,26 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('forms').classList.add('hidden');
         document.getElementById('homePage').classList.remove('hidden');
 
+        fetchAndDisplayPosts(userId);
+
+        // Fetch and display the user's name
+        const userNameElement = document.getElementById('userName');
+        const userNameXhr = new XMLHttpRequest();
+        userNameXhr.open('GET', `/M00915500/users/${userId}`, true);
+        userNameXhr.onreadystatechange = function() {
+            if (userNameXhr.readyState === 4) {
+                const userResult = JSON.parse(userNameXhr.responseText);
+                if (userResult.success) {
+                    userNameElement.textContent = `Welcome, ${userResult.user.username}`;
+                } else {
+                    alert(userResult.error);
+                }
+            }
+        };
+        userNameXhr.send();
+    }
+
+    function fetchAndDisplayPosts(userId) {
         // Fetch and display posts from followed users
         const xhr = new XMLHttpRequest();
         xhr.open('GET', `/M00915500/users/${userId}/following/posts`, true);
@@ -26,6 +46,17 @@ document.addEventListener('DOMContentLoaded', function() {
                             <h3>${post.title}</h3>
                             <p>${post.content}</p>
                             <small>Posted by ${post.username} on ${new Date(post.dateCreated).toLocaleString()}</small>
+                            <button class="btn btn-primary" onclick="likePost('${post._id}')">Like</button>
+                            <span>${post.likes.length} Likes</span>
+                            <form onsubmit="addComment(event, '${post._id}')">
+                                <input type="text" placeholder="Add a comment" required>
+                                <button type="submit" class="btn btn-primary">Comment</button>
+                            </form>
+                            <div class="comments">
+                                ${post.comments.map(comment => `
+                                    <p><strong>${comment.userId}:</strong> ${comment.comment}</p>
+                                `).join('')}
+                            </div>
                         `;
                         if (post.images && post.images.length) {
                             post.images.forEach(image => {
@@ -44,6 +75,44 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         };
         xhr.send();
+    }
+
+    async function likePost(contentId) {
+        const userId = localStorage.getItem('userId');
+        const response = await fetch(`/M00915500/contents/${contentId}/like`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ userId })
+        });
+        const result = await response.json();
+        if (result.success) {
+            alert('Post liked successfully!');
+            fetchAndDisplayPosts(userId);
+        } else {
+            alert(result.error);
+        }
+    }
+
+    async function addComment(event, contentId) {
+        event.preventDefault();
+        const userId = localStorage.getItem('userId');
+        const comment = event.target.querySelector('input').value;
+        const response = await fetch(`/M00915500/contents/${contentId}/comment`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ userId, comment })
+        });
+        const result = await response.json();
+        if (result.success) {
+            alert('Comment added successfully!');
+            fetchAndDisplayPosts(userId);
+        } else {
+            alert(result.error);
+        }
     }
 
     function logout() {
@@ -94,6 +163,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const username = document.getElementById('signupUsername').value;
         const email = document.getElementById('signupEmail').value;
         const password = document.getElementById('signupPassword').value;
+        const confirmPassword = document.getElementById('signupConfirmPassword').value;
+
+        if (password !== confirmPassword) {
+            alert('Passwords do not match');
+            return;
+        }
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/M00915500/users', true);
@@ -244,6 +319,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (result.success) {
             alert(`Successfully followed user ${userToFollowId}`);
             document.getElementById('searchUsersForm').dispatchEvent(new Event('submit'));
+            fetchAndDisplayPosts(userId); // Refresh posts section
         } else {
             alert(result.error);
         }
@@ -261,8 +337,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (result.success) {
             alert(`Successfully unfollowed user ${userToUnfollowId}`);
             document.getElementById('searchUsersForm').dispatchEvent(new Event('submit'));
+            fetchAndDisplayPosts(userId); // Refresh posts section
         } else {
             alert(result.error);
         }
     };
+    window.likePost = likePost;
+    window.addComment = addComment;
 });

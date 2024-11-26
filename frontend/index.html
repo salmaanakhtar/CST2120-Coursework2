@@ -41,6 +41,10 @@
                         <label for="signupPassword">Password:</label>
                         <input type="password" class="form-control" id="signupPassword" name="password" required>
                     </div>
+                    <div class="form-group">
+                        <label for="signupConfirmPassword">Confirm Password:</label>
+                        <input type="password" class="form-control" id="signupConfirmPassword" name="confirmPassword" required>
+                    </div>
                     <button type="submit" class="btn btn-primary">Sign Up</button>
                 </form>
                 <p>Already have an account? <a href="#" onclick="toggleForms()">Login</a></p>
@@ -48,9 +52,11 @@
         </div>
 
         <div id="homePage" class="hidden">
+            <div class="d-flex justify-content-end align-items-center mb-3">
+                <span id="userName" class="mr-3"></span>
+                <button class="btn btn-danger" onclick="logout()">Logout</button>
+            </div>
             <h2>Home Page</h2>
-            <p>Welcome, you are logged in!</p>
-            <button class="btn btn-danger" onclick="logout()">Logout</button>
             
             <h3>Create a Post</h3>
             <form id="createPostForm">
