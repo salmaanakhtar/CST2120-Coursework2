@@ -3,11 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login and Signup</title>
+    <title>PrintScope - 3D Printing Community</title>
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
     <link rel="stylesheet" href="index.css">
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
 </head>
 <body>
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-printer-fill"></i> PrintScope
+            </a>
+        </div>
+    </nav>
     <div class="container mt-5">
         <div id="forms">
             <div id="loginForm">
@@ -56,25 +66,7 @@
                 <span id="userName" class="mr-3"></span>
                 <button class="btn btn-danger" onclick="logout()">Logout</button>
             </div>
-            <h2>Home Page</h2>
-            
-            <h3>Create a Post</h3>
-            <form id="createPostForm">
-                <div class="form-group">
-                    <label for="postTitle">Title:</label>
-                    <input type="text" class="form-control" id="postTitle" name="title" required>
-                </div>
-                <div class="form-group">
-                    <label for="postContent">Content:</label>
-                    <textarea class="form-control" id="postContent" name="content" required></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="postImages">Images (up to 3):</label>
-                    <input type="file" class="form-control" id="postImages" name="images" accept="image/*" multiple>
-                </div>
-                <button type="submit" class="btn btn-primary">Create Post</button>
-            </form>
-        
+
             <form id="searchForm">
                 <div class="form-group">
                     <label for="searchQuery">Search:</label>
@@ -90,7 +82,31 @@
                 </div>
                 <button type="submit" class="btn btn-primary">Search</button>
             </form>
+
             <div id="searchResults"></div>
+            <button onclick="openModal()" class="btn btn-primary mb-3">Create New Post</button>
+
+<div id="createPostModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <h2>Create a Post</h2>
+        <form id="createPostForm" onsubmit="handleSubmit(event)">
+            <div class="form-group">
+                <label for="postTitle">Title:</label>
+                <input type="text" id="postTitle" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="postContent">Content:</label>
+                <textarea id="postContent" class="form-control" rows="4" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="postImages">Images:</label>
+                <input type="file" id="postImages" class="form-control" multiple accept="image/*">
+            </div>
+            <button type="submit" class="btn btn-primary">Create Post</button>
+        </form>
+    </div>
+</div>
             
             <div class="d-flex justify-content-center mb-3">
                 <button id="forYouBtn" class="btn btn-secondary" onclick="showForYouPage()">For You</button>
@@ -98,6 +114,16 @@
             </div>
             
             <div id="postsContainer"></div>
+            
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <div id="featuredModels">
+                            <!-- Featured models will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     <script src="index.js"></script>

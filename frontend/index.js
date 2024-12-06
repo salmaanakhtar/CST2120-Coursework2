@@ -1,4 +1,66 @@
 document.addEventListener('DOMContentLoaded', function() {
+
+    window.openModal = function() {
+        document.getElementById('createPostModal').style.display = 'block';
+    };
+
+    window.closeModal = function() {
+        document.getElementById('createPostModal').style.display = 'none';
+    };
+
+    window.handleSubmit = async function(event) {
+        event.preventDefault();
+        const userId = localStorage.getItem('userId');
+        const title = document.getElementById('postTitle').value;
+        const content = document.getElementById('postContent').value;
+        const images = document.getElementById('postImages').files;
+
+        // Step 1: Create the post
+        const createPostResponse = await fetch('/M00915500/contents', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ userId, title, content })
+        });
+
+        const createPostResult = await createPostResponse.json();
+        if (!createPostResult.success) {
+            alert(createPostResult.error);
+            return;
+        }
+
+        const contentId = createPostResult.contentId;
+
+        // Step 2: Upload images
+        for (let i = 0; i < images.length; i++) {
+            const formData = new FormData();
+            formData.append('image', images[i]);
+
+            const uploadImageResponse = await fetch(`/M00915500/contents/${contentId}/images?userId=${userId}`, {
+                method: 'POST',
+                body: formData
+            });
+
+            const uploadImageResult = await uploadImageResponse.json();
+            if (!uploadImageResult.success) {
+                alert(uploadImageResult.error);
+                return;
+            }
+        }
+
+        alert('Post created successfully!');
+        closeModal();
+        showHomePage(userId);
+    };
+
+    // Add click outside modal to close
+    window.onclick = function(event) {
+        const modal = document.getElementById('createPostModal');
+        if (event.target === modal) {
+            closeModal();
+        }
+    };
     function toggleForms() {
         const loginForm = document.getElementById('loginForm');
         const signupForm = document.getElementById('signupForm');
@@ -6,11 +68,56 @@ document.addEventListener('DOMContentLoaded', function() {
         signupForm.classList.toggle('hidden');
     }
 
+    function openModal() {
+        document.getElementById('createPostModal').style.display = 'block';
+    }
+
+    function closeModal() {
+        document.getElementById('createPostModal').style.display = 'none';
+    }
+
+    function handleSubmit(event) {
+        event.preventDefault();
+        const userId = localStorage.getItem('userId');
+        const title = document.getElementById('postTitle').value;
+        const content = document.getElementById('postContent').value;
+        const images = document.getElementById('postImages').files;
+
+        fetch('/M00915500/contents', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ userId, title, content })
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                alert('Post created successfully!');
+                closeModal();
+                window.location.reload();
+            } else {
+                alert(result.error);
+            }
+        })
+        .catch(error => {
+            alert('Error creating post');
+        });
+    }
+
+    // Close modal when clicking outside
+    window.onclick = function(event) {
+        if (event.target == document.getElementById('createPostModal')) {
+            closeModal();
+        }
+    }
+
     function showHomePage(userId) {
         document.getElementById('forms').classList.add('hidden');
         document.getElementById('homePage').classList.remove('hidden');
 
         fetchAndDisplayPosts(userId);
+        fetchFeaturedModels();
 
         // Fetch and display the user's name
         const userNameElement = document.getElementById('userName');
@@ -75,6 +182,37 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         };
         xhr.send();
+    }
+
+    async function fetchFeaturedModels() {
+        const THINGIVERSE_API_KEY = 'cb6d85ba96eb4ab07fb636e613b4f7f7'; // Replace with your API key
+        try {
+            const response = await fetch('https://api.thingiverse.com/featured', {
+                headers: {
+                    'Authorization': `Bearer ${THINGIVERSE_API_KEY}`
+                }
+            });
+            const models = await response.json();
+            
+            const featuredContainer = document.getElementById('featuredModels');
+            featuredContainer.innerHTML = '<h3 class="mb-4">Featured 3D Models</h3>';
+            
+            models.slice(0, 4).forEach(model => {
+                const modelCard = document.createElement('div');
+                modelCard.className = 'feature-card';
+                modelCard.innerHTML = `
+                    <img src="${model.thumbnail}" alt="${model.name}" class="img-fluid mb-2">
+                    <h5>${model.name}</h5>
+                    <p class="text-muted">by ${model.creator.name}</p>
+                    <a href="${model.public_url}" target="_blank" class="btn btn-primary btn-sm">
+                        View Model <i class="bi bi-box-arrow-up-right"></i>
+                    </a>
+                `;
+                featuredContainer.appendChild(modelCard);
+            });
+        } catch (error) {
+            console.error('Error fetching featured models:', error);
+        }
     }
 
     async function likePost(contentId) {
@@ -445,6 +583,10 @@ document.addEventListener('DOMContentLoaded', function() {
             alert(result.error);
         }
     };
+
+    window.openModal = openModal;
+    window.closeModal = closeModal;
+    window.handleSubmit = handleSubmit;
     window.likePost = likePost;
     window.addComment = addComment;
     showFollowingPage();
