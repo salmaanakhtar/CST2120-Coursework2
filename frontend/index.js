@@ -472,17 +472,18 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </form>
                                 <div class="comments">
                                     ${post.comments.map(comment => `
-                                        <p><strong>${comment.userId}:</strong> ${comment.comment}</p>
+                                        <p><strong>${comment.username}:</strong> ${comment.comment}</p>
                                     `).join('')}
                                 </div>
                             </div>
                         `;
+                    
                         if (post.images && post.images.length) {
                             post.images.forEach(image => {
                                 const imgElement = document.createElement('img');
                                 imgElement.src = image.url;
                                 imgElement.alt = 'Post Image';
-                                imgElement.className = 'card-img-top';
+                                imgElement.className = 'card-img-top post-image'; // Add post-image class
                                 postElement.insertBefore(imgElement, postElement.firstChild);
                             });
                         }
@@ -521,17 +522,18 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </form>
                                 <div class="comments">
                                     ${post.comments.map(comment => `
-                                        <p><strong>${comment.userId}:</strong> ${comment.comment}</p>
+                                        <p><strong>${comment.username}:</strong> ${comment.comment}</p>
                                     `).join('')}
                                 </div>
                             </div>
                         `;
+                    
                         if (post.images && post.images.length) {
                             post.images.forEach(image => {
                                 const imgElement = document.createElement('img');
                                 imgElement.src = image.url;
                                 imgElement.alt = 'Post Image';
-                                imgElement.className = 'card-img-top';
+                                imgElement.className = 'card-img-top post-image'; // Add post-image class
                                 postElement.insertBefore(imgElement, postElement.firstChild);
                             });
                         }

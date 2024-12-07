@@ -573,6 +573,16 @@ app.post(`/${msis}/contents/:contentId/comment`, async (req, res) => {
         await client.connect();
         const db = client.db('CW2');
 
+        // First find the user to get their username
+        const user = await db.collection('users').findOne({ userId: parseInt(userId) });
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found'
+            });
+        }
+
+        // Then check if content exists
         const content = await db.collection('contents').findOne({ _id: new ObjectId(contentId) });
         if (!content) {
             return res.status(404).json({
@@ -583,6 +593,7 @@ app.post(`/${msis}/contents/:contentId/comment`, async (req, res) => {
 
         const commentDoc = {
             userId: parseInt(userId),
+            username: user.username, // Now we have the correct username
             comment,
             dateCreated: new Date()
         };
