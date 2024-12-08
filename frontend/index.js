@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const title = document.getElementById('postTitle').value;
         const content = document.getElementById('postContent').value;
         const images = document.getElementById('postImages').files;
+        const files = document.getElementById('postFiles').files;
     
         try {
             // Step 1: Create the post
@@ -51,6 +52,25 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             }
+
+            // Step 3: Upload files if any are selected
+            if (files.length > 0) {
+                for (let i = 0; i < files.length; i++) {
+                    const formData = new FormData();
+                    formData.append('file', files[i]);
+
+                    const uploadFileResponse = await fetch(`/M00915500/contents/${contentId}/files?userId=${userId}`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const uploadFileResult = await uploadFileResponse.json();
+                    if (!uploadFileResult.success) {
+                        alert(uploadFileResult.error);
+                        return;
+                    }
+                }
+            }
     
             alert('Post created successfully!');
             closeModal();
@@ -58,6 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('postTitle').value = '';
             document.getElementById('postContent').value = '';
             document.getElementById('postImages').value = '';
+            document.getElementById('postFiles').value = '';
             // Refresh posts
             fetchAndDisplayPosts(userId);
             
@@ -123,23 +144,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     postsContainer.innerHTML = '';
                     result.contents.forEach(post => {
                         const postElement = document.createElement('div');
-                        postElement.className = 'post';
+                        postElement.className = 'card mb-3';
                         postElement.innerHTML = `
-                            <h3>${post.title}</h3>
-                            <p>${post.content}</p>
-                            <small>Posted by ${post.username} on ${new Date(post.dateCreated).toLocaleString()}</small>
-                            <button class="btn btn-primary" onclick="likePost('${post._id}')">Like</button>
-                            <span>${post.likes.length} Likes</span>
-                            <form onsubmit="addComment(event, '${post._id}')">
-                                <input type="text" placeholder="Add a comment" required>
-                                <button type="submit" class="btn btn-primary">Comment</button>
-                            </form>
-                            <div class="comments">
-                                ${post.comments.map(comment => `
-                                    <p><strong>${comment.userId}:</strong> ${comment.comment}</p>
-                                `).join('')}
+                            <div class="card-body">
+                                <h3 class="card-title">${post.title}</h3>
+                                <p class="card-text">${post.content}</p>
                             </div>
                         `;
+                        const cardBody = postElement.querySelector('.card-body');
+                        
                         if (post.images && post.images.length) {
                             post.images.forEach(image => {
                                 const imgContainer = document.createElement('div');
@@ -153,13 +166,59 @@ document.addEventListener('DOMContentLoaded', function() {
                                 const downloadBtn = document.createElement('button');
                                 downloadBtn.className = 'btn btn-sm btn-primary download-btn position-absolute';
                                 downloadBtn.innerHTML = '<i class="fas fa-download"></i>';
-                                downloadBtn.onclick = () => window.location.href = `/${msis}/images/${image.id}/download`;
+                                downloadBtn.onclick = () => window.location.href = `/M00915500/images/${image.id}/download`;
                                 
                                 imgContainer.appendChild(imgElement);
                                 imgContainer.appendChild(downloadBtn);
-                                postElement.insertBefore(imgContainer, postElement.firstChild);
+                                cardBody.appendChild(imgContainer);
                             });
                         }
+                        
+                        if (post.files && post.files.length) {
+                            post.files.forEach(file => {
+                                const fileContainer = document.createElement('div');
+                                fileContainer.className = 'file-container';
+                        
+                                const fileElement = document.createElement('a');
+                                fileElement.href = file.url;
+                                fileElement.textContent = file.url.split('/').pop();
+                                fileElement.className = 'file-link';
+                        
+                                const fileExtension = document.createElement('span');
+                                fileExtension.textContent = ` (${file.url.split('.').pop()})`;
+                                fileExtension.className = 'file-extension';
+                        
+                                const downloadBtn = document.createElement('button');
+                                downloadBtn.className = 'btn btn-sm btn-primary download-btn';
+                                downloadBtn.innerHTML = '<i class="fas fa-download"></i>';
+                                downloadBtn.onclick = () => window.location.href = file.url;
+                        
+                                fileContainer.appendChild(fileElement);
+                                fileContainer.appendChild(fileExtension);
+                                fileContainer.appendChild(downloadBtn);
+                                cardBody.appendChild(fileContainer);
+                            });
+                        }
+                        
+                        const postMeta = document.createElement('div');
+                        postMeta.className = 'post-meta';
+                        postMeta.innerHTML = `
+                            <small class="text-muted">Posted by ${post.username} on ${new Date(post.dateCreated).toLocaleString()}</small>
+                            <button class="btn btn-link like-btn" onclick="likePost('${post._id}')">
+                                <i class="fa${post.likes.includes(parseInt(userId)) ? 's' : 'r'} fa-heart"></i>
+                            </button>
+                            <span>${post.likes.length} Likes</span>
+                            <form onsubmit="addComment(event, '${post._id}')">
+                                <input type="text" placeholder="Add a comment" required>
+                                <button type="submit" class="btn btn-primary">Comment</button>
+                            </form>
+                            <div class="comments">
+                                ${post.comments.map(comment => `
+                                    <p><strong>${comment.username}:</strong> ${comment.comment}</p>
+                                `).join('')}
+                            </div>
+                        `;
+                        cardBody.appendChild(postMeta);
                         postsContainer.appendChild(postElement);
                     });
                 } else {
@@ -428,46 +487,79 @@ async function updateWeather() {
                         const postElement = document.createElement('div');
                         postElement.className = 'card mb-3';
                         postElement.innerHTML = `
-    <div class="card-body">
-        <h3 class="card-title">${post.title}</h3>
-        <p class="card-text">${post.content}</p>
-        <small class="text-muted">Posted by ${post.username} on ${new Date(post.dateCreated).toLocaleString()}</small>
-        <button class="btn btn-link like-btn" onclick="likePost('${post._id}')">
-            <i class="fa${post.likes.includes(parseInt(userId)) ? 's' : 'r'} fa-heart"></i>
-        </button>
-        <span>${post.likes.length} Likes</span>
-        <form onsubmit="addComment(event, '${post._id}')">
-            <input type="text" placeholder="Add a comment" required>
-            <button type="submit" class="btn btn-primary">Comment</button>
-        </form>
-        <div class="comments">
-            ${post.comments.map(comment => `
-                <p><strong>${comment.username}:</strong> ${comment.comment}</p>
-            `).join('')}
-        </div>
-    </div>
-`;
-                    
-if (post.images && post.images.length) {
-    post.images.forEach(image => {
-        const imgContainer = document.createElement('div');
-        imgContainer.className = 'image-container position-relative';
-        
-        const imgElement = document.createElement('img');
-        imgElement.src = image.url;
-        imgElement.alt = 'Post Image';
-        imgElement.className = 'card-img-top post-image';
-        
-        const downloadBtn = document.createElement('button');
-        downloadBtn.className = 'btn btn-sm btn-primary download-btn position-absolute';
-        downloadBtn.innerHTML = '<i class="fas fa-download"></i>';
-        downloadBtn.onclick = () => window.location.href = `/M00915500/images/${image.id}/download`;
-        
-        imgContainer.appendChild(imgElement);
-        imgContainer.appendChild(downloadBtn);
-        postElement.insertBefore(imgContainer, postElement.firstChild);
-    });
-}
+                            <div class="card-body">
+                                <h3 class="card-title">${post.title}</h3>
+                                <p class="card-text">${post.content}</p>
+                            </div>
+                        `;
+                        const cardBody = postElement.querySelector('.card-body');
+                        
+                        if (post.images && post.images.length) {
+                            post.images.forEach(image => {
+                                const imgContainer = document.createElement('div');
+                                imgContainer.className = 'image-container position-relative';
+                                
+                                const imgElement = document.createElement('img');
+                                imgElement.src = image.url;
+                                imgElement.alt = 'Post Image';
+                                imgElement.className = 'card-img-top post-image';
+                                
+                                const downloadBtn = document.createElement('button');
+                                downloadBtn.className = 'btn btn-sm btn-primary download-btn position-absolute';
+                                downloadBtn.innerHTML = '<i class="fas fa-download"></i>';
+                                downloadBtn.onclick = () => window.location.href = `/M00915500/images/${image.id}/download`;
+                                
+                                imgContainer.appendChild(imgElement);
+                                imgContainer.appendChild(downloadBtn);
+                                cardBody.appendChild(imgContainer);
+                            });
+                        }
+                        
+                        if (post.files && post.files.length) {
+                            post.files.forEach(file => {
+                                const fileContainer = document.createElement('div');
+                                fileContainer.className = 'file-container';
+                        
+                                const fileElement = document.createElement('a');
+                                fileElement.href = file.url;
+                                fileElement.textContent = file.url.split('/').pop();
+                                fileElement.className = 'file-link';
+                        
+                                const fileExtension = document.createElement('span');
+                                fileExtension.textContent = ` (${file.url.split('.').pop()})`;
+                                fileExtension.className = 'file-extension';
+                        
+                                const downloadBtn = document.createElement('button');
+                                downloadBtn.className = 'btn btn-sm btn-primary download-btn';
+                                downloadBtn.innerHTML = '<i class="fas fa-download"></i>';
+                                downloadBtn.onclick = () => window.location.href = file.url;
+                        
+                                fileContainer.appendChild(fileElement);
+                                fileContainer.appendChild(fileExtension);
+                                fileContainer.appendChild(downloadBtn);
+                                cardBody.appendChild(fileContainer);
+                            });
+                        }
+                        
+                        const postMeta = document.createElement('div');
+                        postMeta.className = 'post-meta';
+                        postMeta.innerHTML = `
+                            <small class="text-muted">Posted by ${post.username} on ${new Date(post.dateCreated).toLocaleString()}</small>
+                            <button class="btn btn-link like-btn" onclick="likePost('${post._id}')">
+                                <i class="fa${post.likes.includes(parseInt(userId)) ? 's' : 'r'} fa-heart"></i>
+                            </button>
+                            <span>${post.likes.length} Likes</span>
+                            <form onsubmit="addComment(event, '${post._id}')">
+                                <input type="text" placeholder="Add a comment" required>
+                                <button type="submit" class="btn btn-primary">Comment</button>
+                            </form>
+                            <div class="comments">
+                                ${post.comments.map(comment => `
+                                    <p><strong>${comment.username}:</strong> ${comment.comment}</p>
+                                `).join('')}
+                            </div>
+                        `;
+                        cardBody.appendChild(postMeta);
                         postsContainer.appendChild(postElement);
                     });
                 } else {
@@ -499,26 +591,13 @@ if (post.images && post.images.length) {
                         const postElement = document.createElement('div');
                         postElement.className = 'card mb-3';
                         postElement.innerHTML = `
-                            <div class="card-body">
-                                <h3 class="card-title">${post.title}</h3>
-                                <p class="card-text">${post.content}</p>
-                                <small class="text-muted">Posted by ${post.username}</small>
-                                <button class="btn btn-link like-btn" onclick="likePost('${post._id}')">
-                                    <i class="fa${post.likes.includes(parseInt(userId)) ? 's' : 'r'} fa-heart"></i>
-                                </button>
-                                <span>${post.likes.length} Likes</span>
-                                <form onsubmit="addComment(event, '${post._id}')">
-                                    <input type="text" placeholder="Add a comment" required>
-                                    <button type="submit" class="btn btn-primary">Comment</button>
-                                </form>
-                                <div class="comments">
-                                    ${post.comments.map(comment => `
-                                        <p><strong>${comment.username}:</strong> ${comment.comment}</p>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        `;
-    
+    <div class="card-body">
+        <h3 class="card-title">${post.title}</h3>
+        <p class="card-text">${post.content}</p>
+    </div>
+`;
+                        const cardBody = postElement.querySelector('.card-body');
+                        
                         if (post.images && post.images.length) {
                             post.images.forEach(image => {
                                 const imgContainer = document.createElement('div');
@@ -536,9 +615,55 @@ if (post.images && post.images.length) {
                                 
                                 imgContainer.appendChild(imgElement);
                                 imgContainer.appendChild(downloadBtn);
-                                postElement.insertBefore(imgContainer, postElement.firstChild);
+                                cardBody.appendChild(imgContainer);
                             });
                         }
+                        
+                        if (post.files && post.files.length) {
+                            post.files.forEach(file => {
+                                const fileContainer = document.createElement('div');
+                                fileContainer.className = 'file-container';
+                        
+                                const fileElement = document.createElement('a');
+                                fileElement.href = file.url;
+                                fileElement.textContent = file.url.split('/').pop();
+                                fileElement.className = 'file-link';
+                        
+                                const fileExtension = document.createElement('span');
+                                fileExtension.textContent = ` (${file.url.split('.').pop()})`;
+                                fileExtension.className = 'file-extension';
+                        
+                                const downloadBtn = document.createElement('button');
+                                downloadBtn.className = 'btn btn-sm btn-primary download-btn';
+                                downloadBtn.innerHTML = '<i class="fas fa-download"></i>';
+                                downloadBtn.onclick = () => window.location.href = `/M00915500/files/${file.id}/download`;
+                        
+                                fileContainer.appendChild(fileElement);
+                                fileContainer.appendChild(fileExtension);
+                                fileContainer.appendChild(downloadBtn);
+                                cardBody.appendChild(fileContainer);
+                            });
+                        }
+                        
+                        const postMeta = document.createElement('div');
+                        postMeta.className = 'post-meta';
+                        postMeta.innerHTML = `
+                            <small class="text-muted">Posted by ${post.username} on ${new Date(post.dateCreated).toLocaleString()}</small>
+                            <button class="btn btn-link like-btn" onclick="likePost('${post._id}')">
+                                <i class="fa${post.likes.includes(parseInt(userId)) ? 's' : 'r'} fa-heart"></i>
+                            </button>
+                            <span>${post.likes.length} Likes</span>
+                            <form onsubmit="addComment(event, '${post._id}')">
+                                <input type="text" placeholder="Add a comment" required>
+                                <button type="submit" class="btn btn-primary">Comment</button>
+                            </form>
+                            <div class="comments">
+                                ${post.comments.map(comment => `
+                                    <p><strong>${comment.username}:</strong> ${comment.comment}</p>
+                                `).join('')}
+                            </div>
+                        `;
+                        cardBody.appendChild(postMeta);
                         postsContainer.appendChild(postElement);
                     });
                 } else {

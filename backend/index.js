@@ -459,6 +459,20 @@ app.get(`/${msis}/contents`, async (req, res) => {
                     id: id.toString()
                 }));
             }
+            if (content.fileIds) {
+                const files = await db.collection('files.files')
+                    .find({ 
+                        _id: { $in: content.fileIds.map(id => new ObjectId(id)) }
+                    })
+                    .toArray();
+                    
+                content.files = files.map(file => ({
+                    url: `/${msis}/files/${file._id}`,
+                    id: file._id.toString(),
+                    filename: file.filename,
+                    contentType: file.contentType
+                }));
+            }
         }
 
         res.json({
@@ -501,6 +515,21 @@ app.get(`/${msis}/contents/all`, async (req, res) => {
                     id: id.toString()
                 }));
             }
+
+            if (content.fileIds) {
+                const files = await db.collection('files.files')
+                    .find({ 
+                        _id: { $in: content.fileIds.map(id => new ObjectId(id)) }
+                    })
+                    .toArray();
+                    
+                content.files = files.map(file => ({
+                    url: `/${msis}/files/${file._id}`,
+                    id: file._id.toString(),
+                    filename: file.filename,
+                    contentType: file.contentType
+                }));
+            }
         }
 
         res.json({
@@ -528,6 +557,20 @@ app.get(`/${msis}/contents/forYou`, async (req, res) => {
                 content.images = content.imageIds.map(id => ({
                     url: `http://localhost:8080/${msis}/images/${id.toString()}`,
                     id: id.toString()
+                }));
+            }
+            if (content.fileIds) {
+                const files = await db.collection('files.files')
+                    .find({ 
+                        _id: { $in: content.fileIds.map(id => new ObjectId(id)) }
+                    })
+                    .toArray();
+                    
+                content.files = files.map(file => ({
+                    url: `/${msis}/files/${file._id}`,
+                    id: file._id.toString(),
+                    filename: file.filename,
+                    contentType: file.contentType
                 }));
             }
         }
@@ -886,6 +929,21 @@ app.get(`/${msis}/users/:userId/following/posts`, async (req, res) => {
                     id: id.toString()
                 }));
             }
+
+            if (content.fileIds) {
+                const files = await db.collection('files.files')
+                    .find({ 
+                        _id: { $in: content.fileIds.map(id => new ObjectId(id)) }
+                    })
+                    .toArray();
+                    
+                content.files = files.map(file => ({
+                    url: `/${msis}/files/${file._id}`,
+                    id: file._id.toString(),
+                    filename: file.filename,
+                    contentType: file.contentType
+                }));
+            }
         }
 
         res.json({
@@ -1064,6 +1122,183 @@ app.get(`/${msis}/contents/search`, async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     } finally {
         await client.close();
+    }
+});
+
+// Updated file upload endpoint using multer for handling multipart form data
+const uploadFile = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+    }
+}).single('file');
+
+// Attach File To Content
+app.post(`/${msis}/contents/:contentId/files`, (req, res) => {
+    uploadFile(req, res, async (err) => {
+        if (err) {
+            return res.status(400).json({
+                success: false,
+                error: err.message
+            });
+        }
+
+        const { contentId } = req.params;
+        const { userId } = req.query;
+
+        if (!userId || !loggedInUsers[userId]) {
+            return res.status(401).json({
+                success: false,
+                error: 'User must be logged in to upload files'
+            });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: 'File is required'
+            });
+        }
+
+        const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+        try {
+            await client.connect();
+            const db = client.db('CW2');
+
+            const content = await db.collection('contents').findOne({
+                _id: new ObjectId(contentId)
+            });
+
+            if (!content) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Content not found'
+                });
+            }
+
+            if (content.userId !== parseInt(userId)) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'Not authorized to add files to this content'
+                });
+            }
+
+            const bucket = new mongodb.GridFSBucket(db, {
+                bucketName: 'files'
+            });
+
+            const uploadStream = bucket.openUploadStream(req.file.originalname, {
+                contentType: req.file.mimetype,
+                metadata: {
+                    contentId: new ObjectId(contentId),
+                    userId: parseInt(userId),
+                    uploadDate: new Date(),
+                    filename: req.file.originalname
+                }
+            });
+
+            const uploadPromise = new Promise((resolve, reject) => {
+                uploadStream.on('finish', () => resolve(uploadStream.id));
+                uploadStream.on('error', reject);
+            });
+
+            uploadStream.write(req.file.buffer);
+            uploadStream.end();
+
+            const fileId = await uploadPromise;
+
+            await db.collection('contents').updateOne(
+                { _id: new ObjectId(contentId) },
+                { $push: { fileIds: fileId } }
+            );
+
+            res.json({
+                success: true,
+                fileId: fileId.toString(),
+                message: 'File uploaded successfully'
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        } finally {
+            await client.close();
+        }
+    });
+});
+
+// Updated file retrieval endpoint
+app.get(`/${msis}/files/:fileId`, async (req, res) => {
+    const { fileId } = req.params;
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        const bucket = new mongodb.GridFSBucket(db, {
+            bucketName: 'files'
+        });
+
+        const file = await db.collection('files.files').findOne({ 
+            _id: new ObjectId(fileId) 
+        });
+
+        if (!file) {
+            return res.status(404).json({
+                success: false,
+                error: 'File not found'
+            });
+        }
+
+        res.set({
+            'Content-Type': file.contentType,
+            'Content-Length': file.length,
+            'Content-Disposition': `inline; filename="${file.metadata.filename}"`,
+            'Cache-Control': 'public, max-age=31557600'
+        });
+
+        const downloadStream = bucket.openDownloadStream(new ObjectId(fileId));
+        downloadStream.on('error', (error) => {
+            res.status(500).json({ success: false, error: error.message });
+        });
+
+        downloadStream.pipe(res);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+//file download endpoint
+app.get(`/${msis}/files/:fileId/download`, async (req, res) => {
+    const { fileId } = req.params;
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+        const bucket = new mongodb.GridFSBucket(db, { bucketName: 'files' });
+        
+        const file = await db.collection('files.files').findOne({ 
+            _id: new ObjectId(fileId) 
+        });
+        
+        if (!file) {
+            return res.status(404).json({
+                success: false,
+                error: 'File not found'
+            });
+        }
+
+        res.set({
+            'Content-Type': 'application/octet-stream',
+            'Content-Disposition': `attachment; filename="${file.metadata.filename}"`,
+            'Content-Length': file.length
+        });
+
+        const downloadStream = bucket.openDownloadStream(new ObjectId(fileId));
+        downloadStream.pipe(res);
+        
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 

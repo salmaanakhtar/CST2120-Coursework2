@@ -84,7 +84,7 @@
             </form>
 
             <div id="searchResults"></div>
-            <button onclick="openModal()" class="btn btn-primary mb-3">Create New Post</button>
+            <button id="post-btn" onclick="openModal()" class="btn btn-primary mb-3 mt-3">Create New Post</button>
 
 <div id="createPostModal" class="modal">
     <div class="modal-content">
@@ -102,6 +102,10 @@
             <div class="form-group">
                 <label for="postImages">Images:</label>
                 <input type="file" id="postImages" class="form-control" multiple accept="image/*">
+            </div>
+            <div class="form-group">
+                <label for="postFiles">Files:</label>
+                <input type="file" id="postFiles" class="form-control" multiple>
             </div>
             <button type="submit" class="btn btn-primary">Create Post</button>
         </form>

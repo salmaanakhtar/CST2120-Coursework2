@@ -204,3 +204,27 @@ body {
 .weather-info i {
     font-size: 16px;
 }
+
+.file-container {
+    display: flex;
+    align-items: center;
+    margin-top: 10px;
+}
+
+.file-link {
+    margin-right: 10px;
+}
+
+.file-extension {
+    margin-right: 10px;
+    color: gray;
+}
+
+.searchResult {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-bottom: 1px solid #333;
+    cursor: pointer;
+}
