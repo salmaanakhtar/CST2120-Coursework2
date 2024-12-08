@@ -14,44 +14,56 @@ document.addEventListener('DOMContentLoaded', function() {
         const title = document.getElementById('postTitle').value;
         const content = document.getElementById('postContent').value;
         const images = document.getElementById('postImages').files;
-
-        // Step 1: Create the post
-        const createPostResponse = await fetch('/M00915500/contents', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ userId, title, content })
-        });
-
-        const createPostResult = await createPostResponse.json();
-        if (!createPostResult.success) {
-            alert(createPostResult.error);
-            return;
-        }
-
-        const contentId = createPostResult.contentId;
-
-        // Step 2: Upload images
-        for (let i = 0; i < images.length; i++) {
-            const formData = new FormData();
-            formData.append('image', images[i]);
-
-            const uploadImageResponse = await fetch(`/M00915500/contents/${contentId}/images?userId=${userId}`, {
+    
+        try {
+            // Step 1: Create the post
+            const createPostResponse = await fetch('/M00915500/contents', {
                 method: 'POST',
-                body: formData
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ userId, title, content })
             });
-
-            const uploadImageResult = await uploadImageResponse.json();
-            if (!uploadImageResult.success) {
-                alert(uploadImageResult.error);
+    
+            const createPostResult = await createPostResponse.json();
+            if (!createPostResult.success) {
+                alert(createPostResult.error);
                 return;
             }
+    
+            const contentId = createPostResult.contentId;
+    
+            // Step 2: Upload images if any are selected
+            if (images.length > 0) {
+                for (let i = 0; i < images.length; i++) {
+                    const formData = new FormData();
+                    formData.append('image', images[i]);
+    
+                    const uploadImageResponse = await fetch(`/M00915500/contents/${contentId}/images?userId=${userId}`, {
+                        method: 'POST',
+                        body: formData
+                    });
+    
+                    const uploadImageResult = await uploadImageResponse.json();
+                    if (!uploadImageResult.success) {
+                        alert(uploadImageResult.error);
+                        return;
+                    }
+                }
+            }
+    
+            alert('Post created successfully!');
+            closeModal();
+            // Clear form
+            document.getElementById('postTitle').value = '';
+            document.getElementById('postContent').value = '';
+            document.getElementById('postImages').value = '';
+            // Refresh posts
+            fetchAndDisplayPosts(userId);
+            
+        } catch (error) {
+            alert('Error creating post: ' + error.message);
         }
-
-        alert('Post created successfully!');
-        closeModal();
-        showHomePage(userId);
     };
 
     // Add click outside modal to close
@@ -74,42 +86,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function closeModal() {
         document.getElementById('createPostModal').style.display = 'none';
-    }
-
-    function handleSubmit(event) {
-        event.preventDefault();
-        const userId = localStorage.getItem('userId');
-        const title = document.getElementById('postTitle').value;
-        const content = document.getElementById('postContent').value;
-        const images = document.getElementById('postImages').files;
-
-        fetch('/M00915500/contents', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ userId, title, content })
-        })
-        .then(response => response.json())
-        .then(result => {
-            if (result.success) {
-                alert('Post created successfully!');
-                closeModal();
-                window.location.reload();
-            } else {
-                alert(result.error);
-            }
-        })
-        .catch(error => {
-            alert('Error creating post');
-        });
-    }
-
-    // Close modal when clicking outside
-    window.onclick = function(event) {
-        if (event.target == document.getElementById('createPostModal')) {
-            closeModal();
-        }
     }
 
     function showHomePage(userId) {
@@ -360,51 +336,6 @@ async function updateWeather() {
             }
         };
         xhr.send(JSON.stringify({ username, email, password }));
-    });
-
-    document.getElementById('createPostForm').addEventListener('submit', async function(event) {
-        event.preventDefault();
-        const userId = localStorage.getItem('userId');
-        const title = document.getElementById('postTitle').value;
-        const content = document.getElementById('postContent').value;
-        const images = document.getElementById('postImages').files;
-
-        // Step 1: Create the post
-        const createPostResponse = await fetch('/M00915500/contents', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ userId, title, content })
-        });
-
-        const createPostResult = await createPostResponse.json();
-        if (!createPostResult.success) {
-            alert(createPostResult.error);
-            return;
-        }
-
-        const contentId = createPostResult.contentId;
-
-        // Step 2: Upload images
-        for (let i = 0; i < images.length; i++) {
-            const formData = new FormData();
-            formData.append('image', images[i]);
-
-            const uploadImageResponse = await fetch(`/M00915500/contents/${contentId}/images?userId=${userId}`, {
-                method: 'POST',
-                body: formData
-            });
-
-            const uploadImageResult = await uploadImageResponse.json();
-            if (!uploadImageResult.success) {
-                alert(uploadImageResult.error);
-                return;
-            }
-        }
-
-        alert('Post created successfully!');
-        showHomePage(userId);
     });
 
     document.getElementById('searchForm').addEventListener('submit', function(event) {
