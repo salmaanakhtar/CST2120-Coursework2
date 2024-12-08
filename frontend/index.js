@@ -216,20 +216,48 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function likePost(contentId) {
+        // Get userId from localStorage
         const userId = localStorage.getItem('userId');
-        const response = await fetch(`/M00915500/contents/${contentId}/like`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ userId })
-        });
-        const result = await response.json();
-        if (result.success) {
-            alert('Post liked successfully!');
-            fetchAndDisplayPosts(userId);
-        } else {
-            alert(result.error);
+        
+        // Check if user is logged in
+        if (!userId) {
+            alert('Please log in to like posts');
+            return;
+        }
+    
+        const method = document.querySelector(`button[onclick="likePost('${contentId}')"] i`).classList.contains('fas') 
+            ? 'DELETE' 
+            : 'POST';
+            
+        try {
+            const response = await fetch(`/M00915500/contents/${contentId}/like`, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ userId })
+            });
+    
+            if (response.ok) {
+                // Toggle heart icon and update likes count
+                const likeBtn = document.querySelector(`button[onclick="likePost('${contentId}')"]`);
+                const icon = likeBtn.querySelector('i');
+                const likesSpan = likeBtn.nextElementSibling;
+                const currentLikes = parseInt(likesSpan.textContent);
+                
+                if (method === 'POST') {
+                    icon.classList.replace('far', 'fas');
+                    likesSpan.textContent = `${currentLikes + 1} Likes`;
+                } else {
+                    icon.classList.replace('fas', 'far');
+                    likesSpan.textContent = `${currentLikes - 1} Likes`;
+                }
+            } else {
+                throw new Error('Failed to update like status');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Failed to update like status');
         }
     }
 
@@ -460,23 +488,25 @@ document.addEventListener('DOMContentLoaded', function() {
                         const postElement = document.createElement('div');
                         postElement.className = 'card mb-3';
                         postElement.innerHTML = `
-                            <div class="card-body">
-                                <h3 class="card-title">${post.title}</h3>
-                                <p class="card-text">${post.content}</p>
-                                <small class="text-muted">Posted by ${post.username} on ${new Date(post.dateCreated).toLocaleString()}</small>
-                                <button class="btn btn-primary" onclick="likePost('${post._id}')">Like</button>
-                                <span>${post.likes.length} Likes</span>
-                                <form onsubmit="addComment(event, '${post._id}')">
-                                    <input type="text" placeholder="Add a comment" required>
-                                    <button type="submit" class="btn btn-primary">Comment</button>
-                                </form>
-                                <div class="comments">
-                                    ${post.comments.map(comment => `
-                                        <p><strong>${comment.username}:</strong> ${comment.comment}</p>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        `;
+    <div class="card-body">
+        <h3 class="card-title">${post.title}</h3>
+        <p class="card-text">${post.content}</p>
+        <small class="text-muted">Posted by ${post.username} on ${new Date(post.dateCreated).toLocaleString()}</small>
+        <button class="btn btn-link like-btn" onclick="likePost('${post._id}')">
+            <i class="fa${post.likes.includes(parseInt(userId)) ? 's' : 'r'} fa-heart"></i>
+        </button>
+        <span>${post.likes.length} Likes</span>
+        <form onsubmit="addComment(event, '${post._id}')">
+            <input type="text" placeholder="Add a comment" required>
+            <button type="submit" class="btn btn-primary">Comment</button>
+        </form>
+        <div class="comments">
+            ${post.comments.map(comment => `
+                <p><strong>${comment.username}:</strong> ${comment.comment}</p>
+            `).join('')}
+        </div>
+    </div>
+`;
                     
                         if (post.images && post.images.length) {
                             post.images.forEach(image => {
@@ -510,23 +540,25 @@ document.addEventListener('DOMContentLoaded', function() {
                         const postElement = document.createElement('div');
                         postElement.className = 'card mb-3';
                         postElement.innerHTML = `
-                            <div class="card-body">
-                                <h3 class="card-title">${post.title}</h3>
-                                <p class="card-text">${post.content}</p>
-                                <small class="text-muted">Posted by ${post.username} on ${new Date(post.dateCreated).toLocaleString()}</small>
-                                <button class="btn btn-primary" onclick="likePost('${post._id}')">Like</button>
-                                <span>${post.likes.length} Likes</span>
-                                <form onsubmit="addComment(event, '${post._id}')">
-                                    <input type="text" placeholder="Add a comment" required>
-                                    <button type="submit" class="btn btn-primary">Comment</button>
-                                </form>
-                                <div class="comments">
-                                    ${post.comments.map(comment => `
-                                        <p><strong>${comment.username}:</strong> ${comment.comment}</p>
-                                    `).join('')}
-                                </div>
+                        <div class="card-body">
+                            <h3 class="card-title">${post.title}</h3>
+                            <p class="card-text">${post.content}</p>
+                            <small class="text-muted">Posted by ${post.username} on ${new Date(post.dateCreated).toLocaleString()}</small>
+                            <button class="btn btn-link like-btn" onclick="likePost('${post._id}')">
+                                <i class="fa${post.likes.includes(parseInt(userId)) ? 's' : 'r'} fa-heart"></i>
+                            </button>
+                            <span>${post.likes.length} Likes</span>
+                            <form onsubmit="addComment(event, '${post._id}')">
+                                <input type="text" placeholder="Add a comment" required>
+                                <button type="submit" class="btn btn-primary">Comment</button>
+                            </form>
+                            <div class="comments">
+                                ${post.comments.map(comment => `
+                                    <p><strong>${comment.username}:</strong> ${comment.comment}</p>
+                                `).join('')}
                             </div>
-                        `;
+                        </div>
+                    `;
                     
                         if (post.images && post.images.length) {
                             post.images.forEach(image => {

@@ -549,6 +549,47 @@ app.post(`/${msis}/contents/:contentId/like`, async (req, res) => {
     }
 });
 
+// Unlike a post
+app.delete(`/${msis}/contents/:contentId/like`, async (req, res) => {
+    const { contentId } = req.params;
+    const { userId } = req.body;
+
+    if (!userId || !loggedInUsers[userId]) {
+        return res.status(401).json({
+            success: false,
+            error: 'User must be logged in to unlike posts'
+        });
+    }
+
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+
+        const content = await db.collection('contents').findOne({ _id: new ObjectId(contentId) });
+        if (!content) {
+            return res.status(404).json({
+                success: false,
+                error: 'Content not found'
+            });
+        }
+
+        await db.collection('contents').updateOne(
+            { _id: new ObjectId(contentId) },
+            { $pull: { likes: parseInt(userId) } }
+        );
+
+        res.json({
+            success: true,
+            message: 'Post unliked successfully'
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        await client.close();
+    }
+});
+
 // Comment on a post
 app.post(`/${msis}/contents/:contentId/comment`, async (req, res) => {
     const { contentId } = req.params;
