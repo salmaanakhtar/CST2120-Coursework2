@@ -193,3 +193,14 @@ body {
 .download-btn:hover {
     opacity: 1;
 }
+
+.weather-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.weather-info i {
+    font-size: 16px;
+}
