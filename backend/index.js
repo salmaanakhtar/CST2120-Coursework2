@@ -368,6 +368,41 @@ app.get(`/${msis}/images/:imageId`, async (req, res) => {
     // Note: Don't close the client here as it would interrupt the stream
 });
 
+// Backend
+app.get(`/${msis}/images/:imageId/download`, async (req, res) => {
+    const { imageId } = req.params;
+    const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+    
+    try {
+        await client.connect();
+        const db = client.db('CW2');
+        const bucket = new mongodb.GridFSBucket(db, { bucketName: 'images' });
+        
+        const file = await db.collection('images.files').findOne({ 
+            _id: new ObjectId(imageId) 
+        });
+        
+        if (!file) {
+            return res.status(404).json({
+                success: false,
+                error: 'Image not found'
+            });
+        }
+
+        res.set({
+            'Content-Type': 'application/octet-stream',
+            'Content-Disposition': `attachment; filename="${file.metadata.filename}"`,
+            'Content-Length': file.length
+        });
+
+        const downloadStream = bucket.openDownloadStream(new ObjectId(imageId));
+        downloadStream.pipe(res);
+        
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Get contents with optional filtering
 app.get(`/${msis}/contents`, async (req, res) => {
     const { userId, viewUserId } = req.query;

@@ -176,3 +176,20 @@ body {
 .like-btn:focus {
     box-shadow: none;
 }
+
+.image-container {
+    position: relative;
+    display: inline-block;
+}
+
+.download-btn {
+    position: absolute !important;
+    bottom: 10px;
+    right: 10px;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.download-btn:hover {
+    opacity: 1;
+}

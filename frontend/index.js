@@ -167,11 +167,22 @@ document.addEventListener('DOMContentLoaded', function() {
                         `;
                         if (post.images && post.images.length) {
                             post.images.forEach(image => {
+                                const imgContainer = document.createElement('div');
+                                imgContainer.className = 'image-container position-relative';
+                                
                                 const imgElement = document.createElement('img');
                                 imgElement.src = image.url;
                                 imgElement.alt = 'Post Image';
-                                imgElement.style.maxWidth = '100%';
-                                postElement.appendChild(imgElement);
+                                imgElement.className = 'card-img-top post-image';
+                                
+                                const downloadBtn = document.createElement('button');
+                                downloadBtn.className = 'btn btn-sm btn-primary download-btn position-absolute';
+                                downloadBtn.innerHTML = '<i class="fas fa-download"></i>';
+                                downloadBtn.onclick = () => window.location.href = `/${msis}/images/${image.id}/download`;
+                                
+                                imgContainer.appendChild(imgElement);
+                                imgContainer.appendChild(downloadBtn);
+                                postElement.insertBefore(imgContainer, postElement.firstChild);
                             });
                         }
                         postsContainer.appendChild(postElement);
@@ -508,15 +519,26 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 `;
                     
-                        if (post.images && post.images.length) {
-                            post.images.forEach(image => {
-                                const imgElement = document.createElement('img');
-                                imgElement.src = image.url;
-                                imgElement.alt = 'Post Image';
-                                imgElement.className = 'card-img-top post-image'; // Add post-image class
-                                postElement.insertBefore(imgElement, postElement.firstChild);
-                            });
-                        }
+if (post.images && post.images.length) {
+    post.images.forEach(image => {
+        const imgContainer = document.createElement('div');
+        imgContainer.className = 'image-container position-relative';
+        
+        const imgElement = document.createElement('img');
+        imgElement.src = image.url;
+        imgElement.alt = 'Post Image';
+        imgElement.className = 'card-img-top post-image';
+        
+        const downloadBtn = document.createElement('button');
+        downloadBtn.className = 'btn btn-sm btn-primary download-btn position-absolute';
+        downloadBtn.innerHTML = '<i class="fas fa-download"></i>';
+        downloadBtn.onclick = () => window.location.href = `/M00915500/images/${image.id}/download`;
+        
+        imgContainer.appendChild(imgElement);
+        imgContainer.appendChild(downloadBtn);
+        postElement.insertBefore(imgContainer, postElement.firstChild);
+    });
+}
                         postsContainer.appendChild(postElement);
                     });
                 } else {
@@ -560,15 +582,26 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     `;
                     
-                        if (post.images && post.images.length) {
-                            post.images.forEach(image => {
-                                const imgElement = document.createElement('img');
-                                imgElement.src = image.url;
-                                imgElement.alt = 'Post Image';
-                                imgElement.className = 'card-img-top post-image'; // Add post-image class
-                                postElement.insertBefore(imgElement, postElement.firstChild);
-                            });
-                        }
+                    if (post.images && post.images.length) {
+                        post.images.forEach(image => {
+                            const imgContainer = document.createElement('div');
+                            imgContainer.className = 'image-container position-relative';
+                            
+                            const imgElement = document.createElement('img');
+                            imgElement.src = image.url;
+                            imgElement.alt = 'Post Image';
+                            imgElement.className = 'card-img-top post-image';
+                            
+                            const downloadBtn = document.createElement('button');
+                            downloadBtn.className = 'btn btn-sm btn-primary download-btn position-absolute';
+                            downloadBtn.innerHTML = '<i class="fas fa-download"></i>';
+                            downloadBtn.onclick = () => window.location.href = `/${msis}/images/${image.id}/download`;
+                            
+                            imgContainer.appendChild(imgElement);
+                            imgContainer.appendChild(downloadBtn);
+                            postElement.insertBefore(imgContainer, postElement.firstChild);
+                        });
+                    }
                         postsContainer.appendChild(postElement);
                     });
                 } else {
