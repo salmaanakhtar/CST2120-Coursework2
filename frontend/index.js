@@ -167,7 +167,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 downloadBtn.className = 'btn btn-sm btn-primary download-btn position-absolute';
                                 downloadBtn.innerHTML = '<i class="fas fa-download"></i>';
                                 downloadBtn.onclick = () => window.location.href = `/M00915500/images/${image.id}/download`;
-                                
+    
                                 imgContainer.appendChild(imgElement);
                                 imgContainer.appendChild(downloadBtn);
                                 cardBody.appendChild(imgContainer);
@@ -535,7 +535,7 @@ async function updateWeather() {
                                 downloadBtn.onclick = () => window.location.href = file.url;
                         
                                 fileContainer.appendChild(fileElement);
-                                fileContainer.appendChild(fileExtension);
+                                //fileContainer.appendChild(fileExtension);
                                 fileContainer.appendChild(downloadBtn);
                                 cardBody.appendChild(fileContainer);
                             });
@@ -563,7 +563,7 @@ async function updateWeather() {
                         postsContainer.appendChild(postElement);
                     });
                 } else {
-                    alert(result.error);
+                    //alert(result.error);
                 }
             }
         };
@@ -639,7 +639,7 @@ async function updateWeather() {
                                 downloadBtn.onclick = () => window.location.href = `/M00915500/files/${file.id}/download`;
                         
                                 fileContainer.appendChild(fileElement);
-                                fileContainer.appendChild(fileExtension);
+                                ///fileContainer.appendChild(fileExtension);
                                 fileContainer.appendChild(downloadBtn);
                                 cardBody.appendChild(fileContainer);
                             });
