@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const files = document.getElementById('postFiles').files;
     
         try {
-            // Step 1: Create the post
+           
             const createPostResponse = await fetch('/M00915500/contents', {
                 method: 'POST',
                 headers: {
@@ -34,7 +34,6 @@ document.addEventListener('DOMContentLoaded', function() {
     
             const contentId = createPostResult.contentId;
     
-            // Step 2: Upload images if any are selected
             if (images.length > 0) {
                 for (let i = 0; i < images.length; i++) {
                     const formData = new FormData();
@@ -53,7 +52,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
 
-            // Step 3: Upload files if any are selected
             if (files.length > 0) {
                 for (let i = 0; i < files.length; i++) {
                     const formData = new FormData();
@@ -74,12 +72,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
             alert('Post created successfully!');
             closeModal();
-            // Clear form
+            
             document.getElementById('postTitle').value = '';
             document.getElementById('postContent').value = '';
             document.getElementById('postImages').value = '';
             document.getElementById('postFiles').value = '';
-            // Refresh posts
+            
             fetchAndDisplayPosts(userId);
             
         } catch (error) {
@@ -87,7 +85,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
-    // Add click outside modal to close
     window.onclick = function(event) {
         const modal = document.getElementById('createPostModal');
         if (event.target === modal) {
@@ -115,7 +112,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         fetchAndDisplayPosts(userId);
 
-        // Fetch and display the user's name
         const userNameElement = document.getElementById('userName');
         const userNameXhr = new XMLHttpRequest();
         userNameXhr.open('GET', `/M00915500/users/${userId}`, true);
@@ -133,7 +129,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function fetchAndDisplayPosts(userId) {
-        // Fetch and display posts from followed users
         const xhr = new XMLHttpRequest();
         xhr.open('GET', `/M00915500/users/${userId}/following/posts`, true);
         xhr.onreadystatechange = function() {
@@ -229,9 +224,8 @@ document.addEventListener('DOMContentLoaded', function() {
         xhr.send();
     }
 
-     // Function to get weather data
 async function getWeatherData(lat, lon) {
-    const API_KEY = 'dec828195e995146594fb653e3c8ad21'; // Replace with your API key
+    const API_KEY = 'dec828195e995146594fb653e3c8ad21'; 
     try {
         const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}`);
         return await response.json();
@@ -241,7 +235,7 @@ async function getWeatherData(lat, lon) {
     }
 }
 
-// Function to update weather in navbar
+
 async function updateWeather() {
     if ("geolocation" in navigator) {
         navigator.geolocation.getCurrentPosition(async (position) => {
@@ -259,10 +253,10 @@ async function updateWeather() {
 }   
 
     async function likePost(contentId) {
-        // Get userId from localStorage
+        
         const userId = localStorage.getItem('userId');
         
-        // Check if user is logged in
+        
         if (!userId) {
             alert('Please log in to like posts');
             return;
@@ -282,7 +276,7 @@ async function updateWeather() {
             });
     
             if (response.ok) {
-                // Toggle heart icon and update likes count
+                
                 const likeBtn = document.querySelector(`button[onclick="likePost('${contentId}')"]`);
                 const icon = likeBtn.querySelector('i');
                 const likesSpan = likeBtn.nextElementSibling;
@@ -474,7 +468,7 @@ async function updateWeather() {
     };
 
     function fetchAndDisplayPosts(userId) {
-        // Fetch and display posts from followed users
+        
         const xhr = new XMLHttpRequest();
         xhr.open('GET', `/M00915500/users/${userId}/following/posts`, true);
         xhr.onreadystatechange = function() {
@@ -535,7 +529,7 @@ async function updateWeather() {
                                 downloadBtn.onclick = () => window.location.href = file.url;
                         
                                 fileContainer.appendChild(fileElement);
-                                //fileContainer.appendChild(fileExtension);
+                                
                                 fileContainer.appendChild(downloadBtn);
                                 cardBody.appendChild(fileContainer);
                             });
@@ -563,7 +557,7 @@ async function updateWeather() {
                         postsContainer.appendChild(postElement);
                     });
                 } else {
-                    //alert(result.error);
+                   
                 }
             }
         };
@@ -571,7 +565,7 @@ async function updateWeather() {
     }
 
     function fetchAndDisplayForYouPosts() {
-        const userId = localStorage.getItem('userId'); // Get userId from localStorage
+        const userId = localStorage.getItem('userId');
         if (!userId) {
             alert('Please log in to view posts');
             return;
@@ -639,7 +633,7 @@ async function updateWeather() {
                                 downloadBtn.onclick = () => window.location.href = `/M00915500/files/${file.id}/download`;
                         
                                 fileContainer.appendChild(fileElement);
-                                ///fileContainer.appendChild(fileExtension);
+                    
                                 fileContainer.appendChild(downloadBtn);
                                 cardBody.appendChild(fileContainer);
                             });
@@ -689,7 +683,7 @@ async function updateWeather() {
         if (result.success) {
             alert(`Successfully followed user ${userToFollowId}`);
             document.getElementById('searchUsersForm').dispatchEvent(new Event('submit'));
-            fetchAndDisplayPosts(userId); // Refresh posts section
+            fetchAndDisplayPosts(userId);
         } else {
             alert(result.error);
         }
@@ -707,7 +701,7 @@ async function updateWeather() {
         if (result.success) {
             alert(`Successfully unfollowed user ${userToUnfollowId}`);
             document.getElementById('searchUsersForm').dispatchEvent(new Event('submit'));
-            fetchAndDisplayPosts(userId); // Refresh posts section
+            fetchAndDisplayPosts(userId);
         } else {
             alert(result.error);
         }

@@ -1,4 +1,3 @@
-// userModel.js
 class User {
     constructor(userId, username, email, password) {
         this.userId = userId;

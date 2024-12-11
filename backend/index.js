@@ -1,9 +1,13 @@
 const express = require('express');
 const mongodb = require('mongodb');
 const bcrypt = require('bcrypt');
-const path = require('path'); // Import the path module
+const path = require('path'); 
 const User = require('./models/userModel');
 const { ObjectId } = require('mongodb');
+const fs = require('fs');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 
 const app = express();
 const port = 8080;
@@ -16,13 +20,11 @@ async function createIndexes() {
         await client.connect();
         const db = client.db('CW2');
         
-        // Create text index for users collection
         await db.collection('users').createIndex({
             username: "text",
             email: "text"
         });
         
-        // Create text index for contents collection
         await db.collection('contents').createIndex({
             title: "text",
             content: "text"
@@ -36,20 +38,16 @@ async function createIndexes() {
     }
 }
 
-// Session management using userId
-let loggedInUsers = {};  // Will store as { userId: { userId: number, username: string } }
+let loggedInUsers = {};
 
-// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '../frontend')));
 
-// Home route
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend', 'index.html'));
 });;
 
-// POST: User Registration
 app.post(`/${msis}/users`, async (req, res) => {
     const { username, email, password } = req.body;
 
@@ -62,7 +60,6 @@ app.post(`/${msis}/users`, async (req, res) => {
         await client.connect();
         const db = client.db('CW2');
         
-        // Check if username already exists
         const existingUser = await db.collection('users').findOne({ username });
         if (existingUser) {
             return res.status(400).json({ 
@@ -71,7 +68,6 @@ app.post(`/${msis}/users`, async (req, res) => {
             });
         }
 
-        // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const lastUser = await db.collection('users').find().sort({ userId: -1 }).limit(1).toArray();
@@ -95,7 +91,6 @@ app.post(`/${msis}/users`, async (req, res) => {
     }
 });
 
-// POST: User Login
 app.post(`/${msis}/login`, async (req, res) => {
     const { username, password } = req.body;
 
@@ -122,7 +117,6 @@ app.post(`/${msis}/login`, async (req, res) => {
     }
 });
 
-// Check login status
 app.get(`/${msis}/login`, (req, res) => {
     const { userId } = req.query;
     res.json({ 
@@ -131,7 +125,6 @@ app.get(`/${msis}/login`, (req, res) => {
     });
 });
 
-// DELETE: User Logout
 app.delete(`/${msis}/login`, (req, res) => {
     const { userId } = req.body;
 
@@ -143,7 +136,6 @@ app.delete(`/${msis}/login`, (req, res) => {
     }
 });
 
-// Post new content
 app.post(`/${msis}/contents`, async (req, res) => {
     const { userId, title, content } = req.body;
 
@@ -199,12 +191,11 @@ app.post(`/${msis}/contents`, async (req, res) => {
     }
 });
 
-// Updated image upload endpoint using multer for handling multipart form data
 const multer = require('multer');
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: {
-        fileSize: 5 * 1024 * 1024, // 5MB limit
+        fileSize: 5 * 1024 * 1024,
     },
     fileFilter: (req, file, cb) => {
         if (file.mimetype.startsWith('image/')) {
@@ -215,7 +206,7 @@ const upload = multer({
     }
 }).single('image');
 
-//Attach Image To Content
+
 app.post(`/${msis}/contents/:contentId/images`, (req, res) => {
     upload(req, res, async (err) => {
         if (err) {
@@ -290,20 +281,20 @@ app.post(`/${msis}/contents/:contentId/images`, (req, res) => {
                 }
             });
 
-            // Create a promise to handle the stream completion
+          
             const uploadPromise = new Promise((resolve, reject) => {
                 uploadStream.on('finish', () => resolve(uploadStream.id));
                 uploadStream.on('error', reject);
             });
 
-            // Write the buffer to the stream
+           
             uploadStream.write(req.file.buffer);
             uploadStream.end();
 
-            // Wait for the upload to complete
+           
             const imageId = await uploadPromise;
 
-            // Update the content document with the new image ID
+            
             await db.collection('contents').updateOne(
                 { _id: new ObjectId(contentId) },
                 { $push: { imageIds: imageId } }
@@ -322,7 +313,7 @@ app.post(`/${msis}/contents/:contentId/images`, (req, res) => {
     });
 });
 
-// Updated image retrieval endpoint
+
 app.get(`/${msis}/images/:imageId`, async (req, res) => {
     const { imageId } = req.params;
 
@@ -335,7 +326,7 @@ app.get(`/${msis}/images/:imageId`, async (req, res) => {
             bucketName: 'images'
         });
 
-        // Get file metadata
+       
         const file = await db.collection('images.files').findOne({ 
             _id: new ObjectId(imageId) 
         });
@@ -347,15 +338,14 @@ app.get(`/${msis}/images/:imageId`, async (req, res) => {
             });
         }
 
-        // Set response headers
         res.set({
             'Content-Type': file.contentType,
             'Content-Length': file.length,
             'Content-Disposition': `inline; filename="${file.metadata.filename}"`,
-            'Cache-Control': 'public, max-age=31557600' // Cache for 1 year
+            'Cache-Control': 'public, max-age=31557600' 
         });
 
-        // Stream the image data
+        
         const downloadStream = bucket.openDownloadStream(new ObjectId(imageId));
         downloadStream.on('error', (error) => {
             res.status(500).json({ success: false, error: error.message });
@@ -365,10 +355,10 @@ app.get(`/${msis}/images/:imageId`, async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
-    // Note: Don't close the client here as it would interrupt the stream
+    
 });
 
-// Backend
+
 app.get(`/${msis}/images/:imageId/download`, async (req, res) => {
     const { imageId } = req.params;
     const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
@@ -403,7 +393,6 @@ app.get(`/${msis}/images/:imageId/download`, async (req, res) => {
     }
 });
 
-// Get contents with optional filtering
 app.get(`/${msis}/contents`, async (req, res) => {
     const { userId, viewUserId } = req.query;
 
@@ -436,11 +425,11 @@ app.get(`/${msis}/contents`, async (req, res) => {
 
         let query = {};
         
-        // If viewUserId is provided, show only that user's posts
+
         if (viewUserId) {
             query.userId = parseInt(viewUserId);
         } else {
-            // Otherwise, show posts from followed users and own posts
+
             query.userId = {
                 $in: [...user.following, parseInt(userId)]
             };
@@ -451,7 +440,6 @@ app.get(`/${msis}/contents`, async (req, res) => {
             .sort({ dateCreated: -1 })
             .toArray();
 
-        // Enhance content with image URLs
         for (let content of contents) {
             if (content.imageIds && content.imageIds.length) {
                 content.images = content.imageIds.map(id => ({
@@ -486,7 +474,6 @@ app.get(`/${msis}/contents`, async (req, res) => {
     }
 });
 
-// Add a helper endpoint to get all contents (for testing)
 app.get(`/${msis}/contents/all`, async (req, res) => {
     const { userId } = req.query;
 
@@ -507,7 +494,6 @@ app.get(`/${msis}/contents/all`, async (req, res) => {
             .sort({ dateCreated: -1 })
             .toArray();
 
-        // Enhance content with image URLs
         for (let content of contents) {
             if (content.imageIds && content.imageIds.length) {
                 content.images = content.imageIds.map(id => ({
@@ -543,7 +529,6 @@ app.get(`/${msis}/contents/all`, async (req, res) => {
     }
 });
 
-//Custom endpoint to get contents for a fyp
 app.get(`/${msis}/contents/forYou`, async (req, res) => {
     const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
     try {
@@ -551,7 +536,6 @@ app.get(`/${msis}/contents/forYou`, async (req, res) => {
         const db = client.db('CW2');
         const contents = await db.collection('contents').aggregate([{ $sample: { size: 10 } }]).toArray();
 
-        // Enhance content with image URLs
         for (let content of contents) {
             if (content.imageIds && content.imageIds.length) {
                 content.images = content.imageIds.map(id => ({
@@ -583,7 +567,6 @@ app.get(`/${msis}/contents/forYou`, async (req, res) => {
     }
 });
 
-// Like a post
 app.post(`/${msis}/contents/:contentId/like`, async (req, res) => {
     const { contentId } = req.params;
     const { userId } = req.body;
@@ -608,7 +591,6 @@ app.post(`/${msis}/contents/:contentId/like`, async (req, res) => {
             });
         }
 
-        // Add userId to likes array if not already liked
         if (!content.likes.includes(parseInt(userId))) {
             await db.collection('contents').updateOne(
                 { _id: new ObjectId(contentId) },
@@ -627,7 +609,6 @@ app.post(`/${msis}/contents/:contentId/like`, async (req, res) => {
     }
 });
 
-// Unlike a post
 app.delete(`/${msis}/contents/:contentId/like`, async (req, res) => {
     const { contentId } = req.params;
     const { userId } = req.body;
@@ -668,7 +649,6 @@ app.delete(`/${msis}/contents/:contentId/like`, async (req, res) => {
     }
 });
 
-// Comment on a post
 app.post(`/${msis}/contents/:contentId/comment`, async (req, res) => {
     const { contentId } = req.params;
     const { userId, comment } = req.body;
@@ -692,7 +672,6 @@ app.post(`/${msis}/contents/:contentId/comment`, async (req, res) => {
         await client.connect();
         const db = client.db('CW2');
 
-        // First find the user to get their username
         const user = await db.collection('users').findOne({ userId: parseInt(userId) });
         if (!user) {
             return res.status(404).json({
@@ -701,7 +680,6 @@ app.post(`/${msis}/contents/:contentId/comment`, async (req, res) => {
             });
         }
 
-        // Then check if content exists
         const content = await db.collection('contents').findOne({ _id: new ObjectId(contentId) });
         if (!content) {
             return res.status(404).json({
@@ -712,7 +690,7 @@ app.post(`/${msis}/contents/:contentId/comment`, async (req, res) => {
 
         const commentDoc = {
             userId: parseInt(userId),
-            username: user.username, // Now we have the correct username
+            username: user.username,
             comment,
             dateCreated: new Date()
         };
@@ -733,13 +711,12 @@ app.post(`/${msis}/contents/:contentId/comment`, async (req, res) => {
     }
 });
 
-// Follow a user (supports both JSON body and URL parameter)
 app.post(`/${msis}/follow/:userToFollowId?`, async (req, res) => {
-    // Get the user to follow from either URL parameter or JSON body
+
     let userToFollowId = req.params.userToFollowId;
     const { userId } = req.body;
     
-    // If not in URL, check JSON body
+
     if (!userToFollowId && req.body.userToFollowId) {
         userToFollowId = req.body.userToFollowId;
     }
@@ -770,7 +747,6 @@ app.post(`/${msis}/follow/:userToFollowId?`, async (req, res) => {
         await client.connect();
         const db = client.db('CW2');
 
-        // Check if both users exist
         const user = await db.collection('users').findOne({ userId: parseInt(userId) });
         const userToFollow = await db.collection('users').findOne({ userId: parseInt(userToFollowId) });
 
@@ -781,7 +757,6 @@ app.post(`/${msis}/follow/:userToFollowId?`, async (req, res) => {
             });
         }
 
-        // Check if already following
         if (user.following.includes(parseInt(userToFollowId))) {
             return res.status(400).json({
                 success: false,
@@ -789,7 +764,6 @@ app.post(`/${msis}/follow/:userToFollowId?`, async (req, res) => {
             });
         }
 
-        // Add to following list
         await db.collection('users').updateOne(
             { userId: parseInt(userId) },
             { $push: { following: parseInt(userToFollowId) } }
@@ -812,13 +786,11 @@ app.post(`/${msis}/follow/:userToFollowId?`, async (req, res) => {
     }
 });
 
-// Unfollow a user (supports both JSON body and URL parameter)
 app.delete(`/${msis}/follow/:userToUnfollowId?`, async (req, res) => {
-    // Get the user to unfollow from either URL parameter or JSON body
+
     let userToUnfollowId = req.params.userToUnfollowId;
     const { userId } = req.body;
     
-    // If not in URL, check JSON body
     if (!userToUnfollowId && req.body.userToUnfollowId) {
         userToUnfollowId = req.body.userToUnfollowId;
     }
@@ -842,7 +814,6 @@ app.delete(`/${msis}/follow/:userToUnfollowId?`, async (req, res) => {
         await client.connect();
         const db = client.db('CW2');
 
-        // Check if both users exist
         const user = await db.collection('users').findOne({ userId: parseInt(userId) });
         const userToUnfollow = await db.collection('users').findOne({ userId: parseInt(userToUnfollowId) });
 
@@ -853,7 +824,6 @@ app.delete(`/${msis}/follow/:userToUnfollowId?`, async (req, res) => {
             });
         }
 
-        // Check if actually following
         if (!user.following.includes(parseInt(userToUnfollowId))) {
             return res.status(400).json({
                 success: false,
@@ -861,7 +831,6 @@ app.delete(`/${msis}/follow/:userToUnfollowId?`, async (req, res) => {
             });
         }
 
-        // Remove from following list
         await db.collection('users').updateOne(
             { userId: parseInt(userId) },
             { $pull: { following: parseInt(userToUnfollowId) } }
@@ -884,7 +853,6 @@ app.delete(`/${msis}/follow/:userToUnfollowId?`, async (req, res) => {
     }
 });
 
-// GET: Fetch posts from followed users
 app.get(`/${msis}/users/:userId/following/posts`, async (req, res) => {
     const { userId } = req.params;
 
@@ -908,7 +876,6 @@ app.get(`/${msis}/users/:userId/following/posts`, async (req, res) => {
             });
         }
 
-        // Fetch posts from followed users and own posts
         const followedUserIds = user.following || [];
         const query = {
             userId: {
@@ -921,7 +888,6 @@ app.get(`/${msis}/users/:userId/following/posts`, async (req, res) => {
             .sort({ dateCreated: -1 })
             .toArray();
 
-        // Enhance content with image URLs
         for (let content of contents) {
             if (content.imageIds && content.imageIds.length) {
                 content.images = content.imageIds.map(id => ({
@@ -957,7 +923,6 @@ app.get(`/${msis}/users/:userId/following/posts`, async (req, res) => {
     }
 });
 
-// Search users endpoint
 app.get(`/${msis}/users/search`, async (req, res) => {
     const { q: searchQuery, userId } = req.query;
 
@@ -986,14 +951,13 @@ app.get(`/${msis}/users/search`, async (req, res) => {
 
         console.log('Connected to database');
 
-        // Perform regex search on usernames
+
         const users = await db.collection('users')
             .find({ username: { $regex: searchQuery, $options: 'i' } })
             .toArray();
 
         console.log(`Found users: ${JSON.stringify(users)}`);
 
-        // Get current user's following list
         const currentUser = await db.collection('users').findOne({ userId: parseInt(userId) });
 
         if (!currentUser) {
@@ -1006,7 +970,6 @@ app.get(`/${msis}/users/search`, async (req, res) => {
 
         console.log(`Current user: ${JSON.stringify(currentUser)}`);
 
-        // Add isFollowing flag to results
         const usersWithFollowStatus = users.map(user => ({
             userId: user.userId,
             username: user.username,
@@ -1029,7 +992,6 @@ app.get(`/${msis}/users/search`, async (req, res) => {
     }
 });
 
-// GET: Fetch user details
 app.get(`/${msis}/users/:userId`, async (req, res) => {
     const { userId } = req.params;
 
@@ -1061,10 +1023,10 @@ app.get(`/${msis}/users/:userId`, async (req, res) => {
     }
 });
 
-// Search contents endpoint
+
 app.get(`/${msis}/contents/search`, async (req, res) => {
     const { q: searchQuery } = req.query;
-    const { userId } = req.query; // For authentication
+    const { userId } = req.query; 
 
     if (!searchQuery) {
         return res.status(400).json({
@@ -1085,7 +1047,6 @@ app.get(`/${msis}/contents/search`, async (req, res) => {
         await client.connect();
         const db = client.db('CW2');
 
-        // Perform text search on contents
         const contents = await db.collection('contents')
             .find(
                 {
@@ -1100,10 +1061,8 @@ app.get(`/${msis}/contents/search`, async (req, res) => {
             .sort({ score: { $meta: "textScore" } })
             .toArray();
 
-        // Get current user's following list for reference
         const currentUser = await db.collection('users').findOne({ userId: parseInt(userId) });
 
-        // Add additional context to each content item
         const enhancedContents = contents.map(content => ({
             ...content,
             isFromFollowedUser: currentUser.following.includes(content.userId),
@@ -1125,15 +1084,14 @@ app.get(`/${msis}/contents/search`, async (req, res) => {
     }
 });
 
-// Updated file upload endpoint using multer for handling multipart form data
 const uploadFile = multer({
     storage: multer.memoryStorage(),
     limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB limit
+        fileSize: 10 * 1024 * 1024,
     }
 }).single('file');
 
-// Attach File To Content
+
 app.post(`/${msis}/contents/:contentId/files`, (req, res) => {
     uploadFile(req, res, async (err) => {
         if (err) {
@@ -1225,7 +1183,6 @@ app.post(`/${msis}/contents/:contentId/files`, (req, res) => {
     });
 });
 
-// Updated file retrieval endpoint
 app.get(`/${msis}/files/:fileId`, async (req, res) => {
     const { fileId } = req.params;
 
@@ -1267,7 +1224,6 @@ app.get(`/${msis}/files/:fileId`, async (req, res) => {
     }
 });
 
-//file download endpoint
 app.get(`/${msis}/files/:fileId/download`, async (req, res) => {
     const { fileId } = req.params;
     const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
@@ -1302,7 +1258,59 @@ app.get(`/${msis}/files/:fileId/download`, async (req, res) => {
     }
 });
 
-// Start server
+app.get(`/${msis}/backup`, async (req, res) => {
+
+    try {
+        const client = new mongodb.MongoClient(mongoUrl, { useUnifiedTopology: true });
+        await client.connect();
+        const db = client.db('CW2');
+
+
+        const backupDir = path.join(__dirname, 'backups');
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupPath = path.join(backupDir, `backup-${timestamp}`);
+        
+        if (!fs.existsSync(backupDir)) {
+            fs.mkdirSync(backupDir);
+        }
+        fs.mkdirSync(backupPath);
+
+        const collections = await db.listCollections().toArray();
+
+  
+        for (const collection of collections) {
+            const data = await db.collection(collection.name).find({}).toArray();
+            fs.writeFileSync(
+                path.join(backupPath, `${collection.name}.json`),
+                JSON.stringify(data, null, 2)
+            );
+        }
+
+     
+        const zipPath = `${backupPath}.zip`;
+        await execPromise(`powershell Compress-Archive -Path "${backupPath}/*" -DestinationPath "${zipPath}"`);
+
+     
+        res.download(zipPath, `backup-${timestamp}.zip`, (err) => {
+            if (err) {
+                console.error('Error sending backup:', err);
+            }
+       
+            fs.rmSync(backupPath, { recursive: true, force: true });
+            fs.rmSync(zipPath, { force: true });
+        });
+
+        await client.close();
+
+    } catch (error) {
+        console.error('Backup error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to create backup'
+        });
+    }
+});
+
 app.listen(port, () => {
     createIndexes();
     console.log(`Server is running at http://localhost:${port}`);
